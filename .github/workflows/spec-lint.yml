@@ -1,0 +1,30 @@
+name: Spec Lint
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  lint-spec:
+    name: Run Specification Linter
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📦 Checkout code
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Node.js (NPM 패키지 기반 툴인 경우)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 📥 Install Dependencies
+        run: npm install # 혹은 npm ci
+
+      - name: 🔍 Run spec-lint
+        # 툴에 맞는 명령어와 검사할 디렉토리/파일로 교체하세요.
+        # 예: npx @umxr/spec-lint docs/specs/ --json
+        # 예: npx @stoplight/spectral-cli lint openapi.yaml
+        run: npx spec-lint docs/specs/
