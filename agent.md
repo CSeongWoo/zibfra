@@ -17,7 +17,7 @@ spec 파일이 없으므로 게이트는 **PR 리뷰**로 강제한다.
 1. **설계안 제시** — 코드 없이, PR 설명(또는 응답)에 §2의 4개 항목을 적는다.
 2. **승인** — 사람의 명시적 approve 또는 "구현 진행" 지시. 에이전트는 자기 설계안을 스스로 승인하지 않는다.
 3. **구현** — 승인된 설계안과 1:1로. 설계안에 없는 라이브러리/프레임워크 추가 금지.
-4. **검증 → 동기화** — 설계안의 수식·제약을 테스트로 확인. 구현 불가/괴리 시 코드를 끼워맞추지 말고 설계안과 이 문서를 먼저 고친다(§8).
+4. **검증 → 동기화** — 설계안의 수식·제약을 테스트로 확인. 구현 불가/괴리 시 코드를 끼워맞추지 말고 설계안과 이 문서를 먼저 고친다(§11).
 - **게이트 필수**: 신규 엔드포인트, 스키마 변경, 점수/알고리즘 신설·수정, 외부 연동 신설, 인프라/스택 변경.
 - **게이트 면제**: 오타·포매팅·리네이밍·로직 무변경 리팩터·테스트 보강·패치 버전 업.
 
@@ -25,13 +25,13 @@ spec 파일이 없으므로 게이트는 **PR 리뷰**로 강제한다.
 1. **스택**(§3) — 건드리는 표준 스택만. 신규 의존성은 사유 명시(원칙 금지).
 2. **DB 흐름**(§4) — 쓰기/읽기 라우팅, DDL, 동기화, 좌표 단위.
 3. **알고리즘**(§5) — 카운트가 아닌 수식·의사코드·분기.
-4. **API/프론트**(§6, §7) — 엔드포인트·페이로드·에러 계약·인증, 줌 분기, Pinia/onUnmounted.
+4. **API/프론트/인증**(§6, §7, §10) — 엔드포인트·페이로드·에러 계약·인증(JWT/Redis 포함), 줌 분기, Pinia/onUnmounted.
 > 위 항목 + **테스트 기준**(경계값·단위·성능 한계치)을 함께 적는다.
 
 ## 3. 스택 (확정)
 - 백엔드: **Spring Boot**.
 - 데이터 접근: **MyBatis를 기본(baseline)으로 필수.** PostGIS 공간 쿼리는 MyBatis 매퍼의 Native SQL로 작성하고 `resultMap`으로 DTO 매핑. JPA/Querydsl은 일반 CRUD에 한해 선택 허용하되, **공간 연산엔 쓰지 않는다.**
-- DB: MySQL 8.x(쓰기·인증) / PostgreSQL 15·PostGIS 3.x(읽기·공간 분석).
+- DB: MySQL 8.x(쓰기·인증) / PostgreSQL 15·PostGIS 3.x(읽기·공간 분석) / **Redis**(토큰 상태 관리 — §10).
 - 프론트: Vue 3 Composition + Pinia + Axios, 카카오 맵.
 - 멀티 데이터소스: MyBatis `SqlSessionFactory`/`DataSource`를 MySQL용·PostGIS용으로 분리하고 트랜잭션 매니저를 라우팅.
 - **AI**: 외부 LLM API 연동(§6). HTTP 클라이언트(`RestTemplate`)로 직접 호출. 별도 AI 프레임워크 의존성 추가 시 설계안에서 사유 명시 후 승인 필요.
@@ -39,7 +39,7 @@ spec 파일이 없으므로 게이트는 **PR 리뷰**로 강제한다.
 ## 4. DB & 동기화
 - 쓰기=MySQL, 읽기·공간 분석=PostGIS. **double-write 금지.**
 - 동기화: 기본 = 배치/아웃박스(MySQL→PostGIS upsert). CDC(Debezium/Kafka)는 실시간 반영이 배치로 감당 안 될 때만. 소규모면 PostGIS 단일 DB 통합도 검토.
-- **좌표 단위 (필수)**: SRID 4326 geometry에서 `ST_DWithin`의 거리는 미터가 아니라 도(degree)다. `::geography` 캐스팅(미터) 또는 EPSG:5179/5186 투영을 명시. `ST_Distance` 단독 금지, GiST 인덱스 필수.
+- **좌표 단위 (필수)**: SRID 4326 `geometry` 타입에서 `ST_DWithin`의 거리 파라미터는 degree 단위로 해석된다(1도 ≈ 111km). 미터 단위로 검색하려면 반드시 `::geography` 캐스팅을 사용해야 한다(`ST_DWithin(geom::geography, target::geography, radius_m)`). EPSG:5179/5186 투영도 허용하나 캐스팅이 기본. `ST_Distance` 단독 사용 금지(인덱스 미사용), GiST 인덱스 필수.
 
 ## 5. 입지 점수
 - 거리 감쇠: `t ≤ 5 → W=1`, `t > 5 → W = 1/(t/5)²`.
@@ -77,7 +77,7 @@ final = sum(score.values())
 ### 6.2 공통 아키텍처 원칙
 - **백엔드 프록시 필수**: Vue(클라이언트)에서 LLM API를 직접 호출 금지(API 키 유출·CORS). 모든 AI 호출은 `POST /api/v1/ai/**` 백엔드 엔드포인트를 경유한다.
 - **인증**: AI 엔드포인트 전체 **Protected(Bearer JWT)** — 무분별한 토큰 소모 방지.
-- **LLM 선택**: spec에서 모델을 명시한다(예: `gpt-4o-mini`, `claude-haiku`). 모델 교체는 §10 Living Document 절차에 따라 이 문서를 먼저 수정.
+- **LLM 선택**: spec에서 모델을 명시한다(예: `gpt-4o-mini`, `claude-haiku`). 모델 교체는 §11 Living Document 절차에 따라 이 문서를 먼저 수정.
 - **스트리밍**: 초기 구현은 단순 요청-응답(non-streaming). 응답 지연 허용치(p95 < 10초) 초과 시 Server-Sent Events(SSE) 스트리밍으로 전환 가능하나, 전환 전 별도 설계안 승인 필요.
 - **Fallback**: LLM API 타임아웃(> 10초)·오류 시 `null`이 아닌 **빈 요약 객체** + `summaryAvailable: false` 를 반환한다. 프론트는 이 필드로 요약 UI를 숨긴다.
 
@@ -196,7 +196,7 @@ final = sum(score.values())
 - **AI 요약**: `POST /api/v1/ai/**` — 전체 Protected. Fallback(`summaryAvailable: false`) 포함 응답 계약 필수(§6).
 - **마커 상세**: 줌인도 폭발할 수 있으므로 페이지네이션 또는 마커 cap 명시.
 - **프록시(공공데이터)**: 키 은닉·CORS 차단용. 상시 데이터는 배치 적재본(PostGIS)에서 조회하고, **프록시는 배치 미반영분 실시간 단건 등 한정 용도.** 상위 API 타임아웃/Rate Limit 시 504/503 + `Retry-After` 반환(§9 retry 연계).
-- **인증**: 지도 조회=public, 프록시·입지 점수·AI 요약=protected(쿼터·남용 방지). JWT는 `Authorization: Bearer`, 토큰 발급·갱신·만료 흐름 명시. 사용자 조회는 MySQL 읽기.
+- **인증**: 지도 조회=public, 프록시·입지 점수·AI 요약=protected(쿼터·남용 방지). JWT는 `Authorization: Bearer`. 토큰 발급·RTR 재발급·Blacklist 로그아웃 상세 흐름은 §10에서 정의. 사용자 조회는 MySQL 읽기.
 - **캐싱**: 줌아웃 요약·프록시 응답에 `ETag`/`Cache-Control`/TTL. AI 요약은 DB 캐시(§6.5).
 - **에러 계약**: 모든 엔드포인트에 상태코드·에러 스키마 정의(누락 401/403, 잘못된 bbox 400 등).
 
@@ -206,5 +206,28 @@ final = sum(score.values())
 - 상권정보: `https://www.data.go.kr/data/15083033/fileData.do` → 미식·여가 POI로 매핑
 - 적재: 심야 배치 + §7 요약 지표 동시 갱신. retry 정책·스테이징 테이블·중복 검사 명시.
 
-## 10. Living Document
+## 10. JWT 인증 및 Redis 활용 규약
+인증 및 인가 시스템은 JWT(JSON Web Token)를 사용하며, 토큰의 상태 관리 및 보안성 강화를 위해 Redis를 인메모리 저장소로 활용한다. 에이전트는 다음 설계 메커니즘을 엄격히 구현해야 한다.
+
+### 10.1. 토큰 이원화 및 Redis 저장 구조
+- **Access Token**: 무상태(Stateless)로 관리하며, 유효 기간은 **30분**으로 고정한다. 클라이언트의 Request Header(`Authorization: Bearer <Token>`)를 통해 검증한다.
+- **Refresh Token**: 사용자의 로그인 유지 및 Access Token 재발급을 위해 사용하며, Redis에 저장하여 관리한다.
+  - **Key 구조**: `rt:{userId}` (형식 통일, 예: `rt:12`)
+  - **Value 구조**: 발행된 Refresh Token 문자열
+  - **TTL (Time-To-Live)**: Refresh Token 유효 기간과 정확히 일치시켜 자동 만료한다. **TTL = 14일**로 확정. TTL 변경 시 §11 절차를 따른다.
+
+### 10.2. 토큰 재발급 (RTR: Refresh Token Rotation)
+- Access Token 만료 후 재발급 요청 시, 클라이언트가 보낸 Refresh Token과 Redis에 저장된 해당 유효 토큰을 비교 검증한다.
+- 검증 성공 시 **기존 Refresh Token을 Redis에서 삭제(또는 만료 처리)하고, 새로운 Access Token과 Refresh Token을 함께 재발급**하여 Redis에 갱신 저장한다(RTR 전략). 만약 Redis에 저장된 토큰과 일치하지 않거나 탈취가 의심되는 경우 즉시 토큰을 무효화하고 로그아웃 처리한다.
+
+### 10.3. 로그아웃 및 Access Token Blacklist 관리
+- 로그아웃 요청 시, 세션 무효화를 위해 Redis 내의 Refresh Token(`rt:{userId}`)을 즉시 삭제한다.
+- 이미 발행된 Access Token의 잔여 유효 시간 동안 발생할 수 있는 보안 취약점을 막기 위해 **Blacklist 방식**을 도입한다.
+  - 로그아웃 요청 시 전달받은 Access Token의 남은 유효 시간(만료 시간 - 현재 시간)을 계산한다.
+  - **Key 구조**: `bl:{accessToken}`
+  - **Value 구조**: `logout` (상수 문자열)
+  - **TTL**: 계산된 Access Token의 남은 유효 시간으로 설정한다.
+- **Security Filter 체인 반영**: 모든 API 요청을 처리하는 인증 필터(`JwtAuthenticationFilter`)에서 Request Header로 들어온 Access Token이 Redis Blacklist(`bl:...`)에 존재하는지 확인하는 로직을 필수적으로 포함한다. 존재할 경우, 유효한 토큰 형태이더라도 `401 Unauthorized`를 반환해야 한다.
+
+## 11. Living Document
 규칙·수식·스택이 현실과 어긋나면 편법 코드 금지. 멈추고 **이 문서를 먼저 고친다.** 변경 시 사유를 PR에 남긴다.

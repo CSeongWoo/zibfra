@@ -1,4 +1,4 @@
-# Zipfra Read-Only API — 설계안 (spec draft)
+# Zibfra Read-Only API — 설계안 (spec draft)
 
 > **상태: DRAFT — 사람 승인 전 구현·마이그레이션 착수 금지 (AGENT.md §1.2)**
 > 
