@@ -5,84 +5,55 @@
       <div class="logo">
         <span class="logo-icon">🏙️</span>
         <h1>Zipfra</h1>
-        <span class="badge badge-info">Vue.js Build Base</span>
+        <span class="badge badge-info">Map Base</span>
       </div>
-      
+
       <div class="status-indicator">
         <span class="pulse-dot"></span>
-        <span class="status-text">Build Status: <strong>READY</strong></span>
+        <span class="status-text">
+          Zoom <strong>{{ mapStore.zoom ?? '–' }}</strong> · {{ mapStore.strategy ?? 'IDLE' }}
+        </span>
       </div>
     </header>
 
-    <!-- Content Workspace -->
+    <!-- Map workspace -->
     <main class="workspace">
-      <div class="welcome-card glass-panel animate-slide-up">
-        <h2>🎉 Vue.js 3 빌드 환경 구축 완료</h2>
-        <p class="subtitle">agent.md 및 rest-api-spec.md 구현을 위한 기본 빌드 환경이 정상적으로 생성되었습니다.</p>
+      <KakaoMap @viewport-change="onViewport" @marker-click="onMarkerClick" />
 
-        <!-- Tech Stack Badge Info -->
-        <div class="stack-grid">
-          <div class="stack-item glass-card">
-            <span class="stack-icon">⚡</span>
-            <h3>Vite 5</h3>
-            <p>초고속 빌드 도구</p>
-          </div>
-          <div class="stack-item glass-card">
-            <span class="stack-icon">🟢</span>
-            <h3>Vue 3</h3>
-            <p>Composition API 기반</p>
-          </div>
-          <div class="stack-item glass-card">
-            <span class="stack-icon">🍍</span>
-            <h3>Pinia</h3>
-            <p>전역 상태 관리 스토어</p>
-          </div>
-          <div class="stack-item glass-card">
-            <span class="stack-icon">📡</span>
-            <h3>Axios</h3>
-            <p>HTTP 비동기 통신 라이브러리</p>
-          </div>
-        </div>
-
-        <!-- Spec Implementation Checklist -->
-        <div class="checklist-section">
-          <h3>📌 agent.md 요구사항 매핑 상태</h3>
-          <ul class="checklist">
-            <li class="checked">
-              <span class="check-icon">✓</span>
-              <div>
-                <strong>Vite + Vue 3 빌드 시스템 구성</strong>
-                <p>package.json, vite.config.js, index.html 설정 완료</p>
-              </div>
-            </li>
-            <li class="checked">
-              <span class="check-icon">✓</span>
-              <div>
-                <strong>Global CSS 스타일링 가이드라인</strong>
-                <p>index.css에 다크모드, 글래스모피즘, 폼 인풋 및 버튼 테마 토큰 정의 완료</p>
-              </div>
-            </li>
-            <li class="checked">
-              <span class="check-icon">✓</span>
-              <div>
-                <strong>Axios API 통신 규격 준비</strong>
-                <p>Vite dev server를 활용한 백엔드 프록시 (/api/v1) 설정 완료</p>
-              </div>
-            </li>
-          </ul>
-        </div>
-
-        <!-- Footer actions -->
-        <div class="card-footer">
-          <p class="info-note">이제 로컬에서 <code>pnpm dev</code>를 통해 개발 서버를 가동하거나 <code>pnpm build</code>를 실행할 수 있습니다.</p>
-        </div>
+      <div class="map-overlay glass-panel">
+        <h3>실시간 뷰포트 (§7 · §8)</h3>
+        <dl>
+          <dt>bbox</dt>
+          <dd>{{ mapStore.bbox ?? '–' }}</dd>
+          <dt>zoom(level)</dt>
+          <dd>{{ mapStore.zoom ?? '–' }}</dd>
+          <dt>last propertyId</dt>
+          <dd>{{ lastPropertyId ?? '–' }}</dd>
+        </dl>
+        <p class="hint">지도를 움직이면 bbox가 갱신됩니다. 마커는 Phase 2(MAP-01)에서 주입됩니다.</p>
       </div>
     </main>
   </div>
 </template>
 
 <script setup>
-// Ready for component scripts
+import { ref } from 'vue';
+import KakaoMap from '@/components/map/KakaoMap.vue';
+import { useMapStore } from '@/stores/map';
+
+const mapStore = useMapStore();
+const lastPropertyId = ref(null);
+
+function onViewport({ bbox, level }) {
+  // mapStore는 KakaoMap 내부에서 이미 갱신함. 여기선 데모용 로그.
+  console.log('[viewport-change]', bbox, 'level', level);
+}
+
+// §7.4: 지도는 propertyId만 발신. 모달 등 상세는 부모/Dev B(Phase 2)가 처리.
+function onMarkerClick(propertyId) {
+  lastPropertyId.value = propertyId;
+  console.log('[marker-click] propertyId =', propertyId);
+}
 </script>
 
 <style>
@@ -145,139 +116,48 @@
 
 .workspace {
   flex: 1;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 40px;
-  background-image: 
-    radial-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 0);
-  background-size: 24px 24px;
+  position: relative;
 }
 
-.welcome-card {
-  max-width: 680px;
-  width: 100%;
-  border-radius: var(--radius-lg);
-  padding: 36px;
-  box-shadow: var(--shadow-lg);
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
-.welcome-card h2 {
-  font-size: 24px;
-  font-family: var(--font-heading);
-  background: linear-gradient(135deg, #fff 0%, var(--text-secondary) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.subtitle {
-  font-size: 14px;
-  color: var(--text-secondary);
-  line-height: 1.6;
-}
-
-.stack-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-}
-
-.stack-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  padding: 16px;
+.map-overlay {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 5;
+  max-width: 340px;
+  padding: 16px 18px;
   border-radius: var(--radius-md);
+  font-size: 12px;
 }
 
-.stack-icon {
-  font-size: 24px;
-  margin-bottom: 8px;
-}
-
-.stack-item h3 {
-  font-size: 14px;
-  margin-bottom: 4px;
-  color: var(--text-primary);
-}
-
-.stack-item p {
-  font-size: 11px;
-  color: var(--text-secondary);
-}
-
-.checklist-section {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  border-top: 1px solid var(--border-color);
-  padding-top: 20px;
-}
-
-.checklist-section h3 {
-  font-size: 14px;
+.map-overlay h3 {
+  font-size: 12px;
   color: var(--accent-color);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  margin-bottom: 10px;
 }
 
-.checklist {
-  list-style-type: none;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+.map-overlay dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
 }
 
-.checklist li {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-}
-
-.check-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  background: rgba(16, 185, 129, 0.1);
-  border: 1px solid var(--color-success);
-  color: var(--color-success);
-  border-radius: 50%;
-  font-size: 10px;
-  font-weight: bold;
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-
-.checklist li strong {
-  font-size: 13px;
-  color: var(--text-primary);
-  display: block;
-}
-
-.checklist li p {
-  font-size: 11px;
+.map-overlay dt {
   color: var(--text-secondary);
-  margin-top: 2px;
 }
 
-.card-footer {
-  border-top: 1px solid var(--border-color);
-  padding-top: 16px;
-  font-size: 12px;
-  color: var(--text-tertiary);
-}
-
-.info-note code {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--accent-color);
-  padding: 2px 6px;
-  border-radius: 4px;
+.map-overlay dd {
+  color: var(--text-primary);
   font-family: monospace;
+  word-break: break-all;
+}
+
+.map-overlay .hint {
+  margin-top: 10px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.5;
 }
 </style>

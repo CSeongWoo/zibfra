@@ -1,0 +1,6 @@
+# 로컬 환경 변수 (카카오 앱키 등) — .env.example만 커밋한다.
+.env
+.env.local
+.env.*.local
+node_modules/
+dist/

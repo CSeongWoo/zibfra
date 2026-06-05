@@ -8,6 +8,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- 카카오 지도 SDK. appkey는 .env의 VITE_KAKAO_APP_KEY로 주입(Vite %VITE_*% 치환). autoload=false → KakaoMap.vue에서 kakao.maps.load() 호출. -->
+    <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=%VITE_KAKAO_APP_KEY%&autoload=false&libraries=services,clusterer"></script>
   </head>
   <body>
     <div id="app"></div>
