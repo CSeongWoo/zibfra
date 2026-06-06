@@ -1,4 +1,4 @@
-# DB 스키마 설계 — Zibfra
+# DB 스키마 설계 — Zipfra
 
 > 멀티 데이터소스(§4) 기준 ERD 및 테이블 명세. MySQL(쓰기/인증) · PostGIS(읽기/공간) · Redis(토큰)로 물리 분리.
 > Cross-DB FK 미생성(논리 ID 참조만). 모든 `geom`은 `geometry(Point, 4326)` + GiST 필수.

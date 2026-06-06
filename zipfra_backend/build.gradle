@@ -26,6 +26,7 @@ dependencies {
 	// 2. 데이터베이스 & MyBatis (JPA, QueryDSL 완전 제거)
 	implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:3.0.3'
 	runtimeOnly 'com.mysql:mysql-connector-j'
+	runtimeOnly 'org.postgresql:postgresql' // spatialDataSource(PostGIS) JDBC 드라이버
 
 	// 3. 보안 (Security & JWT)
 	// OAuth2, Thymeleaf 관련 의존성 제거
@@ -40,6 +41,8 @@ dependencies {
 	// 5. 개발 편의 도구 (AWS, Redis, Actuator 제거)
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.2' // Swagger
+	implementation 'io.github.cdimascio:dotenv-java:3.0.0' // .env 환경변수 로더
+
 
 	// 6. Lombok
 	compileOnly 'org.projectlombok:lombok'
@@ -58,3 +61,5 @@ dependencies {
 tasks.named('test') {
 	useJUnitPlatform()
 }
+
+
