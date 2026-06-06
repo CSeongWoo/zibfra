@@ -1,0 +1,48 @@
+spring:
+  application:
+    name: zipfra
+
+  # 멀티 데이터소스 자동구성 비활성화 (§3)
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration
+      - org.mybatis.spring.boot.autoconfigure.MybatisAutoConfiguration
+
+  datasource:
+    # primaryDataSource — MySQL (쓰기·인증)
+    primary:
+      driver-class-name: com.mysql.cj.jdbc.Driver
+      url: jdbc:mysql://${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DB}?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true
+      username: ${MYSQL_USER}
+      password: ${MYSQL_PASSWORD}
+      hikari:
+        pool-name: HikariPool-Primary
+        maximum-pool-size: 10
+        minimum-idle: 2
+
+    # spatialDataSource — PostGIS (읽기·공간 분석)
+    spatial:
+      driver-class-name: org.postgresql.Driver
+      url: jdbc:postgresql://${PG_HOST}:${PG_PORT}/${PG_DB}
+      username: ${PG_USER}
+      password: ${PG_PASSWORD}
+      hikari:
+        pool-name: HikariPool-Spatial
+        maximum-pool-size: 10
+        minimum-idle: 2
+
+# Zipfra 보안 설정 (§10)
+jwt:
+  secret: ${JWT_SECRET_KEY}
+
+# MyBatis 설정
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true
+
+# Logging
+logging:
+  level:
+    com.example.zipfra: DEBUG
+    com.zaxxer.hikari: INFO

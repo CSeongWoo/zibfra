@@ -1,0 +1,48 @@
+# Phase 1 — JWT Security Skeleton 구현 결과
+
+> **AGENTS.md §1 준수**: 설계 승인에 따른 1:1 구현과 검증 완료 보고.
+
+## 1. 구현 내용
+
+Spring Boot 4.0.6 및 JJWT 0.11.5를 활용한 JWT 기반 보안 뼈대 구축 및 예외 처리 시스템을 완성했습니다.
+
+### 1.1 핵심 구현 컴포넌트
+
+*   [JwtUtil.java](file:///c:/csw/zipfra_backend/zipfra_backend/src/main/java/com/example/zipfra/security/JwtUtil.java) `[NEW]`:
+    *   HMAC-SHA256 알고리즘에 적합한 256비트 시크릿 키 기반 `Key` 객체 구성.
+    *   `Jwts.parserBuilder()` 규격을 적용하여 토큰 파싱 및 서명/만료 유효성 검증 제공.
+*   [ZipfraPrincipal.java](file:///c:/csw/zipfra_backend/zipfra_backend/src/main/java/com/example/zipfra/security/ZipfraPrincipal.java) `[NEW]`:
+    *   Spring Security의 `UserDetails` 규격을 구현하여 인증된 클라이언트 주체를 SecurityContext에 저장.
+*   [JwtAuthenticationFilter.java](file:///c:/csw/zipfra_backend/zipfra_backend/src/main/java/com/example/zipfra/security/JwtAuthenticationFilter.java) `[NEW]`:
+    *   `OncePerRequestFilter`를 상속하며, 헤더에서 Bearer 토큰 추출 후 검증 실패 시 Request attribute(`exception`)에 에러 코드를 저장하여 위임.
+*   [CustomAuthenticationEntryPoint.java](file:///c:/csw/zipfra_backend/zipfra_backend/src/main/java/com/example/zipfra/security/CustomAuthenticationEntryPoint.java) `[NEW]`:
+    *   미인증 상태로 접근하거나 JWT 검증 오류 시, AGENTS.md §8.3 공통 에러 응답 규약(`error`, `message`, `timestamp`)에 부합하는 JSON 바디를 출력.
+    *   `TOKEN_MISSING`(401), `TOKEN_EXPIRED`(401), `TOKEN_INVALID`(403) 분기 매핑 완료.
+*   [CustomAccessDeniedHandler.java](file:///c:/csw/zipfra_backend/zipfra_backend/src/main/java/com/example/zipfra/security/CustomAccessDeniedHandler.java) `[NEW]`:
+    *   인가 실패 시 JSON 형태의 403 Forbidden 및 `TOKEN_INVALID` 응답을 처리.
+*   [SecurityConfig.java](file:///c:/csw/zipfra_backend/zipfra_backend/src/main/java/com/example/zipfra/config/SecurityConfig.java) `[MODIFY]`:
+    *   임시 `permitAll()` 설정을 삭제하고 Session STATELESS 설정, Public/Protected URL 라우팅 규칙 및 EntryPoint/AccessDeniedHandler 연동.
+
+---
+
+## 2. 검증 결과
+
+### 2.1 빌드 성공
+*   `./gradlew compileJava` ── **BUILD SUCCESSFUL**
+
+### 2.2 T-6 테스트 케이스 검증 결과
+*   테스트 코드: [JwtSecurityTest.java](file:///c:/csw/zipfra_backend/zipfra_backend/src/test/java/com/example/zipfra/security/JwtSecurityTest.java)
+*   **테스트 통과 로그**:
+    ```text
+    JwtSecurityTest > T_6_1_Protected_Without_Token_Should_Return_401_TOKEN_MISSING() PASSED
+    JwtSecurityTest > T_6_2_Protected_With_Expired_Token_Should_Return_401_TOKEN_EXPIRED() PASSED
+    JwtSecurityTest > T_6_3_Protected_With_Invalid_Token_Should_Return_403_TOKEN_INVALID() PASSED
+    JwtSecurityTest > T_6_4_Public_Markers_Without_Token_Should_Return_200_OK() PASSED
+    JwtSecurityTest > T_6_5_Public_Reviews_Without_Token_Should_Return_200_OK() PASSED
+    JwtSecurityTest > T_6_6_Post_Reviews_Without_Token_Should_Return_401_TOKEN_MISSING() PASSED
+    JwtSecurityTest > Valid_Token_Should_Allow_Protected_Access() PASSED
+    
+    BUILD SUCCESSFUL in 15s
+    ```
+
+모든 API 라우팅 규약과 에러 처리 사양이 설계서 및 단일 진실 원천(`AGENTS.md`)의 요건에 100% 부합함을 확인하였습니다.
