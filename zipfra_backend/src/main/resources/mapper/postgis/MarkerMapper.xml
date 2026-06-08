@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.zipfra.mapper.postgis.MarkerMapper">
+
+    <!--
+      MAP-01 공간 조회 (AGENTS.md §4).
+      - bbox 필터는 geometry GiST 인덱스를 타도록 geom && ST_MakeEnvelope(...,4326) 고정.
+      - 좌표는 PGobject 직접 매핑 금지 → ST_X/ST_Y 로 double 분리.
+      - map-underscore-to-camel-case=true (SpatialDataSourceConfig) → snake 컬럼 자동 매핑.
+    -->
+
+    <!-- DETAIL: bbox 내 매물 총 개수 -->
+    <select id="countMarkers" resultType="long">
+        SELECT count(*)
+        FROM real_estate_sales
+        WHERE geom &amp;&amp; ST_MakeEnvelope(#{bbox.minLng}, #{bbox.minLat}, #{bbox.maxLng}, #{bbox.maxLat}, 4326)
+    </select>
+
+    <!-- DETAIL: bbox 내 매물 마커 페이지 -->
+    <select id="findMarkers" resultType="com.example.zipfra.dto.map.MarkerDTO">
+        SELECT id,
+               ST_Y(geom)      AS lat,
+               ST_X(geom)      AS lng,
+               building_name,
+               deal_amount,
+               exclusive_area,
+               floor_no
+        FROM real_estate_sales
+        WHERE geom &amp;&amp; ST_MakeEnvelope(#{bbox.minLng}, #{bbox.minLat}, #{bbox.maxLng}, #{bbox.maxLat}, 4326)
+        ORDER BY id
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+
+    <!-- SUMMARY: bbox 내 시·군·구 사전 집계 -->
+    <select id="findRegionSummaries" resultType="com.example.zipfra.dto.map.RegionSummaryDTO">
+        SELECT region_cd,
+               region_name,
+               center_lat AS lat,
+               center_lon AS lng,
+               deal_count,
+               avg_amount,
+               max_amount
+        FROM region_summary
+        WHERE geom &amp;&amp; ST_MakeEnvelope(#{bbox.minLng}, #{bbox.minLat}, #{bbox.maxLng}, #{bbox.maxLat}, 4326)
+        ORDER BY region_cd
+    </select>
+
+</mapper>

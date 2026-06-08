@@ -1,0 +1,26 @@
+package com.example.zipfra.mapper.postgis;
+
+import java.util.List;
+
+import com.example.zipfra.dto.map.Bbox;
+import com.example.zipfra.dto.map.MarkerDTO;
+import com.example.zipfra.dto.map.RegionSummaryDTO;
+import org.apache.ibatis.annotations.Param;
+
+/**
+ * MAP-01 공간 조회 매퍼 (PostGIS, spatialSqlSessionFactory).
+ * bbox 필터는 geometry GiST 인덱스를 타도록 {@code geom && ST_MakeEnvelope(...,4326)} 사용(§4).
+ */
+public interface MarkerMapper {
+
+    /** DETAIL: bbox 내 매물 총 개수(페이지네이션 totalCount 용). */
+    long countMarkers(@Param("bbox") Bbox bbox);
+
+    /** DETAIL: bbox 내 매물 마커 페이지. */
+    List<MarkerDTO> findMarkers(@Param("bbox") Bbox bbox,
+                                @Param("size") int size,
+                                @Param("offset") long offset);
+
+    /** SUMMARY: bbox 내 시·군·구 사전 집계. */
+    List<RegionSummaryDTO> findRegionSummaries(@Param("bbox") Bbox bbox);
+}
