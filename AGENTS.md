@@ -316,6 +316,28 @@ final = sum(score.values())
 - 데이터 흐름: 지도 `@marker-click(propertyId)` → 부모/스토어(Pinia) → 모달 `:propertyId` Props 주입.
 - **역방향 의존 금지**: 모달 컴포넌트는 지도 인스턴스를 직접 참조하지 않는다.
 
+### 7.5 프론트엔드 디자인 정체성 (Map-First UI)
+
+모든 Vue 3 + Tailwind CSS 컴포넌트는 아래의 'Map-First UI' 디자인 정체성을 AGENTS.md에 엄격하게 반영해야 한다. 기성 어드민 대시보드 형태를 배제하고, 세련된 프롭테크(PropTech) 스타일을 유지한다.
+
+1. **레이아웃 구조 (Map-First Strategy)**
+- Base Layer: 전체 화면(`100vw`, `100vh`, `overflow-hidden`)은 항상 카카오맵 인터페이스가 완전히 채운다.
+- Overlays: 모든 UI 요소(검색창, 정보 카드, 모달 등)는 지도 위에 독립된 섬(Floating Island)처럼 완전히 떠 있는 레이아웃 구조를 가진다. (`z-index` 정밀 제어 필수)
+
+2. **시각적 무드 (Glassmorphism & Clean Tech)**
+- 매끄러운 반투명 효과: 기본 배경색은 순수한 불투명 흰색이 아닌, `bg-white/90 backdrop-blur-lg border border-white/40` 구조를 사용하여 뒷배경(지도)이 은은하게 비치도록 처리한다.
+- 부드러운 그림자: 레이어 간의 입체감을 위해 강력하고 부드러운 그림자(`shadow-2xl` 또는 `shadow-xl`)를 필수적으로 적용한다.
+- 둥근 라운딩: 딱딱한 각진 모서리를 배제하고, 메인 카드는 `rounded-3xl`, 버튼이나 태그는 `rounded-xl` 또는 `rounded-full`을 사용하여 모던하고 유연한 느낌을 준다.
+
+3. **컬러 시스템 (Color Palette)**
+- Primary (포인트/브랜드): Indigo-600 (`#4f46e5`) 또는 Blue-600 (`#2563eb`)을 사용하여 데이터의 신뢰성과 테크니컬한 감성을 강조한다.
+- Accent (성공/위험): 데이터 점수 상승 시 Emerald-600, 감점이나 경고 발생 시 Rose-500을 매핑한다.
+- Text: 가독성을 위해 제목은 Slate-900, 본문은 Slate-700, 캡션은 Slate-400~500 라인을 유지한다.
+
+4. **인터랙션 및 모션**
+- 사이드바나 모달이 등장할 때, `transition-all duration-500 ease-out`을 활용하여 딱딱하게 끊기지 않고 부드럽게 미끄러지듯(Slide-in) 나타나고 사라져야 한다.
+- 마커나 버튼 위에 마우스를 올리면 호버 효과(`hover:scale-105 transition`, `hover:bg-indigo-700`)가 자연스럽게 동작해야 한다.
+
 ## 8. REST API 규약
 전체 엔드포인트 계약은 §8.1(Dev A)·§8.2(Dev B)에, 공통 에러·라우팅은 §8.3에 명세한다(조회·분석 + 인증·회원·리뷰·즐겨찾기 쓰기 포함). 모든 API는 아래 규약을 따른다.
 - **Bounding Box**: 파라미터 순서·SRID(4326)를 못 박고(예: `minLng,minLat,maxLng,maxLat`), lat/lng 뒤바뀜을 검증·거부. 거대 bbox 가드(최대 면적 초과 시 거부 또는 강제 요약).
@@ -458,4 +480,5 @@ final = sum(score.values())
 규칙·수식·스택이 현실과 어긋나면 편법 코드 금지. 멈추고 **이 문서를 먼저 고친다.** 변경 시 사유를 PR에 남긴다.
 
 **변경 이력**
+- (2026-06-08) 프론트엔드 디자인 정체성(Map-First UI, Glassmorphism, Color Palette, Interaction & Motion) 규칙을 §7.5에 추가.
 - (2026-06-05) `docs/specs/rest-api-spec.md`·`Read Only Api.spec.md`를 본 문서로 병합·삭제(SSOT 단일화). 도메인 상세는 §2.1·§4·§5·§7·§8.1로 흡수. JWT 값(Access 30분/Refresh 14일/Redis `rt:{userId}`)은 §10 원안 유지로 확정.
