@@ -8,51 +8,57 @@
         <span class="badge badge-info">Map Base</span>
       </div>
 
-      <div class="status-indicator">
-        <span class="pulse-dot"></span>
-        <span class="status-text">
-          Zoom <strong>{{ mapStore.zoom ?? '–' }}</strong> · {{ mapStore.strategy ?? 'IDLE' }}
-        </span>
+      <div class="header-actions">
+        <div class="status-indicator">
+          <span class="pulse-dot"></span>
+          <span class="status-text">
+            Zoom <strong>{{ mapStore.zoom ?? '–' }}</strong> · {{ mapStore.strategy ?? 'IDLE' }}
+          </span>
+        </div>
+
+        <div class="auth-section">
+          <template v-if="authStore.isAuthenticated">
+            <span class="user-greeting">
+              안녕하세요, <strong>{{ authStore.currentUser?.nickname }}</strong>님
+            </span>
+            <button class="auth-btn logout-btn" @click="handleLogout" :disabled="authStore.loading">
+              로그아웃
+            </button>
+          </template>
+          <template v-else>
+            <button class="auth-btn login-btn" @click="goToLogin">
+              로그인 / 회원가입
+            </button>
+          </template>
+        </div>
       </div>
     </header>
 
-    <!-- Map workspace -->
-    <main class="workspace">
-      <KakaoMap @viewport-change="onViewport" @marker-click="onMarkerClick" />
-
-      <div class="map-overlay glass-panel">
-        <h3>실시간 뷰포트 (§7 · §8)</h3>
-        <dl>
-          <dt>bbox</dt>
-          <dd>{{ mapStore.bbox ?? '–' }}</dd>
-          <dt>zoom(level)</dt>
-          <dd>{{ mapStore.zoom ?? '–' }}</dd>
-          <dt>last propertyId</dt>
-          <dd>{{ lastPropertyId ?? '–' }}</dd>
-        </dl>
-        <p class="hint">지도를 움직이면 bbox가 갱신됩니다. 마커는 Phase 2(MAP-01)에서 주입됩니다.</p>
-      </div>
-    </main>
+    <!-- Vue Router View -->
+    <router-view />
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue';
-import KakaoMap from '@/components/map/KakaoMap.vue';
+import { useRouter } from 'vue-router';
 import { useMapStore } from '@/stores/map';
+import { useAuthStore } from '@/stores/auth';
 
 const mapStore = useMapStore();
-const lastPropertyId = ref(null);
+const authStore = useAuthStore();
+const router = useRouter();
 
-function onViewport({ bbox, level }) {
-  // mapStore는 KakaoMap 내부에서 이미 갱신함. 여기선 데모용 로그.
-  console.log('[viewport-change]', bbox, 'level', level);
+function goToLogin() {
+  router.push('/login');
 }
 
-// §7.4: 지도는 propertyId만 발신. 모달 등 상세는 부모/Dev B(Phase 2)가 처리.
-function onMarkerClick(propertyId) {
-  lastPropertyId.value = propertyId;
-  console.log('[marker-click] propertyId =', propertyId);
+async function handleLogout() {
+  try {
+    await authStore.logout();
+    router.push('/');
+  } catch (error) {
+    console.error('Logout failed:', error);
+  }
 }
 </script>
 
@@ -159,5 +165,55 @@ function onMarkerClick(propertyId) {
   color: var(--text-tertiary);
   font-size: 11px;
   line-height: 1.5;
+}
+
+/* Header button and user styles */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.auth-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.user-greeting {
+  color: var(--text-primary);
+}
+
+.auth-btn {
+  padding: 6px 16px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  transition: all 0.25s ease;
+  outline: none;
+}
+
+.login-btn {
+  background: linear-gradient(135deg, #4f46e5 0%, #2563eb 100%);
+  color: #ffffff;
+}
+
+.login-btn:hover {
+  opacity: 0.95;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+}
+
+.logout-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.logout-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
 }
 </style>

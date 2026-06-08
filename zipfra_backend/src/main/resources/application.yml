@@ -2,12 +2,21 @@ spring:
   application:
     name: zipfra
 
-  # 멀티 데이터소스 자동구성 비활성화 (§3)
+  # 멀티 데이터소스 자동구성 비활성화 (§3) — Redis는 별도 자동 구성 허용 (단, Redis Repositories는 미사용이므로 제외)
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
       - org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration
       - org.mybatis.spring.boot.autoconfigure.MybatisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+
+  # Redis (§10 — RT 저장 + AT Blacklist)
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      repositories:
+        enabled: false
 
   datasource:
     # primaryDataSource — MySQL (쓰기·인증)

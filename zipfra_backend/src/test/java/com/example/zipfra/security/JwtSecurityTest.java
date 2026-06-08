@@ -41,12 +41,14 @@ public class JwtSecurityTest {
 
     private MockMvc mockMvc;
 
-
     @Autowired
     private WebApplicationContext context;
 
     @Autowired
     private JwtUtil jwtUtil;
+
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    private org.springframework.data.redis.core.RedisTemplate<String, String> redisTemplate;
 
     @org.springframework.beans.factory.annotation.Value("${jwt.secret}")
     private String secretKey;
@@ -155,10 +157,24 @@ public class JwtSecurityTest {
     @Test
     public void Valid_Token_Should_Allow_Protected_Access() throws Exception {
         String validToken = jwtUtil.generateAccessToken(1L, "test@test.com");
+        org.mockito.BDDMockito.given(redisTemplate.hasKey("bl:" + validToken)).willReturn(false);
 
         mockMvc.perform(post("/api/v1/location/score")
                         .header("Authorization", "Bearer " + validToken)
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    public void Protected_With_Blacklisted_Token_Should_Return_401_TOKEN_BLACKLISTED() throws Exception {
+        String token = jwtUtil.generateAccessToken(1L, "test@test.com");
+        org.mockito.BDDMockito.given(redisTemplate.hasKey("bl:" + token)).willReturn(true);
+
+        mockMvc.perform(post("/api/v1/location/score")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error").value("TOKEN_BLACKLISTED"))
+                .andExpect(jsonPath("$.message").value("Token has been blacklisted (logged out)"));
     }
 }

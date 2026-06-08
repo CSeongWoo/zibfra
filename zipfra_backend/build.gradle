@@ -38,7 +38,10 @@ dependencies {
 	// 4. 공공데이터 통신 (선택: XML 파싱이 필요할 경우 주석 해제)
 	// implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-xml'
 
-	// 5. 개발 편의 도구 (AWS, Redis, Actuator 제거)
+	// 5. Redis (토큰 상태 관리 — §10 RT/AT Blacklist)
+	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+
+	// 6. 개발 편의 도구
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.2' // Swagger
 	implementation 'io.github.cdimascio:dotenv-java:3.0.0' // .env 환경변수 로더
