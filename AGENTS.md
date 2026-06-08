@@ -108,6 +108,68 @@ spec 파일이 없으므로 게이트는 **PR 리뷰**로 강제한다.
 | `primaryDataSource` (MySQL) | `primarySqlSessionFactory` / `primaryTransactionManager` | `com.example.zipfra.mapper.mysql.*` | 사용자·인증 읽기 |
 | `spatialDataSource` (PostGIS) | `spatialSqlSessionFactory` / `spatialTransactionManager` | `com.example.zipfra.mapper.postgis.*` | 공간·집계 읽기 |
 
+### 3.3 프로젝트 디렉토리 표준 구조
+
+차후 구현 작업은 아래의 백엔드 및 프론트엔드 표준 구조와 컴포넌트 역할을 준수하여 진행한다.
+
+#### 3.3.1 백엔드 구조
+
+백엔드([zipfra_backend](./zipfra_backend)) 프로젝트의 완료된 뼈대 파일 및 디렉토리 구조는 다음과 같다.
+
+*   [zipfra_backend](./zipfra_backend)
+    *   [build.gradle](./zipfra_backend/build.gradle): 프로젝트 의존성 관리 및 빌드 설정 파일. MyBatis 3.0.3, Spring Boot 4.0.6, Spring Security, JJWT 등이 정의됨.
+    *   [.env](./zipfra_backend/.env): DB/Redis 주소, JWT 비밀키 등 민감한 로컬 개발용 환경 변수를 관리하는 설정 파일.
+    *   `src/`
+        *   `main/`
+            *   `java/com/example/zipfra/`
+                *   [ZipfraApplication.java](./zipfra_backend/src/main/java/com/example/zipfra/ZipfraApplication.java): Spring Boot 메인 애플리케이션 시작 클래스.
+                *   [config/](./zipfra_backend/src/main/java/com/example/zipfra/config): 데이터소스 및 보안 설정을 포함하는 자바 설정 클래스 패키지.
+                    *   [PrimaryDataSourceConfig.java](./zipfra_backend/src/main/java/com/example/zipfra/config/PrimaryDataSourceConfig.java): MySQL(`primaryDataSource`) 및 트랜잭션 매니저, `SqlSessionFactory` 설정. `com.example.zipfra.mapper.mysql` 패키지를 스캔함.
+                    *   [SpatialDataSourceConfig.java](./zipfra_backend/src/main/java/com/example/zipfra/config/SpatialDataSourceConfig.java): PostGIS(`spatialDataSource`) 및 트랜잭션 매니저, `SqlSessionFactory` 설정. `com.example.zipfra.mapper.postgis` 패키지를 스캔함.
+                    *   [SecurityConfig.java](./zipfra_backend/src/main/java/com/example/zipfra/config/SecurityConfig.java): Spring Security 및 JWT 인증/인가 필터 체인 환경설정 클래스.
+                *   [mapper/](./zipfra_backend/src/main/java/com/example/zipfra/mapper): MyBatis Mapper 인터페이스 패키지.
+                    *   [mysql/](./zipfra_backend/src/main/java/com/example/zipfra/mapper/mysql): MySQL 전용 Mapper 인터페이스가 추가될 위치. [package-info.java](./zipfra_backend/src/main/java/com/example/zipfra/mapper/mysql/package-info.java) 포함.
+                    *   [postgis/](./zipfra_backend/src/main/java/com/example/zipfra/mapper/postgis): PostGIS 전용 Mapper 인터페이스가 추가될 위치. [package-info.java](./zipfra_backend/src/main/java/com/example/zipfra/mapper/postgis/package-info.java) 포함. (ST_DWithin 미터 단위 캐스팅 및 경위도 double 매핑 수칙 주의)
+                *   [security/](./zipfra_backend/src/main/java/com/example/zipfra/security): Spring Security와 JWT 인증 관련 핵심 컴포넌트 패키지.
+                    *   [JwtUtil.java](./zipfra_backend/src/main/java/com/example/zipfra/security/JwtUtil.java): Access/Refresh JWT 생성, 검증, 파싱 유틸리티.
+                    *   [JwtAuthenticationFilter.java](./zipfra_backend/src/main/java/com/example/zipfra/security/JwtAuthenticationFilter.java): Request 헤더의 Bearer 토큰 및 Redis Blacklist(`bl:{accessToken}`)를 검증하는 서블릿 필터.
+                    *   [ZipfraPrincipal.java](./zipfra_backend/src/main/java/com/example/zipfra/security/ZipfraPrincipal.java): Spring Security의 `UserDetails` 구현체.
+                    *   [CustomAuthenticationEntryPoint.java](./zipfra_backend/src/main/java/com/example/zipfra/security/CustomAuthenticationEntryPoint.java): 인증 실패 시 에러 응답(`TOKEN_MISSING`/`TOKEN_EXPIRED` 등)을 커스텀 JSON 포맷으로 일치시키는 엔트리포인트.
+                    *   [CustomAccessDeniedHandler.java](./zipfra_backend/src/main/java/com/example/zipfra/security/CustomAccessDeniedHandler.java): 인가 실패 시 에러 응답(`TOKEN_INVALID`)을 커스텀 JSON 포맷으로 일치시키는 핸들러.
+            *   `resources/`
+                *   [application.yml](./zipfra_backend/src/main/resources/application.yml): MySQL 및 PostgreSQL/PostGIS 멀티 데이터소스 계정 정보 설정 및 MyBatis 설정, 로깅, 예외 제외 구성 파일.
+                *   `mapper/`: MyBatis SQL XML 매퍼 파일 위치.
+                    *   [mysql/dummy.xml](./zipfra_backend/src/main/resources/mapper/mysql/dummy.xml): MySQL XML 매퍼 기본 skeleton 파일.
+                    *   [postgis/dummy.xml](./zipfra_backend/src/main/resources/mapper/postgis/dummy.xml): PostGIS XML 매퍼 기본 skeleton 파일.
+        *   `test/`
+            *   `java/com/example/zipfra/`
+                *   [ZipfraApplicationTests.java](./zipfra_backend/src/test/java/com/example/zipfra/ZipfraApplicationTests.java): 컨텍스트 로딩 단위 테스트.
+                *   [security/JwtSecurityTest.java](./zipfra_backend/src/test/java/com/example/zipfra/security/JwtSecurityTest.java): JWT 토큰 발행, 파싱, 보안 에러 코드 핸들링, Blacklist 검증 등 스프링 시큐리티 통합 테스트 코드.
+
+#### 3.3.2 프론트엔드 구조
+
+프론트엔드([zipfra_frontend](./zipfra_frontend)) 프로젝트의 완료된 뼈대 파일 및 디렉토리 구조는 다음과 같다.
+
+*   [zipfra_frontend](./zipfra_frontend)
+    *   [package.json](./zipfra_frontend/package.json): 패키지 의존성 및 빌드 스크립트 정의 파일. Vue 3, Pinia, Axios 등 포함.
+    *   [vite.config.js](./zipfra_frontend/vite.config.js): Vite 빌드 및 개발 서버 환경 설정 파일.
+    *   [index.html](./zipfra_frontend/index.html): 애플리케이션의 메인 HTML 템플릿 (카카오 맵 API 및 메인 스크립트 로드).
+    *   [.env.example](./zipfra_frontend/.env.example): 프론트엔드에 필요한 환경 변수 템플릿 파일.
+    *   `src/`
+        *   [main.js](./zipfra_frontend/src/main.js): 프론트엔드 진입점. Vue 인스턴스 초기화 및 스토어 마운트 처리.
+        *   [App.vue](./zipfra_frontend/src/App.vue): 메인 레이아웃 및 Map-First UI 화면 구성을 담당하는 루트 컴포넌트.
+        *   [index.css](./zipfra_frontend/src/index.css): 전역 CSS 파일 (구글 폰트 불러오기, 기본 스타일 및 Glassmorphism 디자인 토큰 구성).
+        *   [api/](./zipfra_frontend/src/api): 백엔드 API와의 통신을 관리하는 디렉토리.
+            *   [http.js](./zipfra_frontend/src/api/http.js): Axios 인스턴스 설정. API 요청 시 Bearer JWT 포함 처리 및 전송/응답 인터셉터 구성.
+        *   [components/](./zipfra_frontend/src/components): 화면 구성에 필요한 공통 컴포넌트 디렉토리.
+            *   [map/](./zipfra_frontend/src/components/map)
+                *   [KakaoMap.vue](./zipfra_frontend/src/components/map/KakaoMap.vue): 카카오 지도 API 연동, 마커 렌더링, 이벤트 리스너(드래그, 줌 등) 설정 컴포넌트.
+        *   [stores/](./zipfra_frontend/src/stores): Pinia 상태 관리 디렉토리.
+            *   [auth.js](./zipfra_frontend/src/stores/auth.js): 사용자 인증 상태, Access Token/Refresh Token 관리 스토어.
+            *   [map.js](./zipfra_frontend/src/stores/map.js): 지도 줌 레벨, 현재 Bounding Box 범위, 클릭된 마커 ID 등 지도 정보 상태 관리 스토어.
+        *   [utils/](./zipfra_frontend/src/utils): 공통 헬퍼 함수 디렉토리.
+            *   [bbox.js](./zipfra_frontend/src/utils/bbox.js): Bounding Box 파싱, 경계값 유효성 검증 및 대각 거리 계산 유틸리티.
+
 ## 4. DB & 동기화
 - 쓰기=MySQL, 읽기·공간 분석=PostGIS. **double-write 금지.**
 - 동기화: 기본 = 배치/아웃박스(MySQL→PostGIS upsert). CDC(Debezium/Kafka)는 실시간 반영이 배치로 감당 안 될 때만. 소규모면 PostGIS 단일 DB 통합도 검토.
@@ -480,5 +542,6 @@ final = sum(score.values())
 규칙·수식·스택이 현실과 어긋나면 편법 코드 금지. 멈추고 **이 문서를 먼저 고친다.** 변경 시 사유를 PR에 남긴다.
 
 **변경 이력**
+- (2026-06-08) 백엔드 및 프론트엔드 파일 구조 파악 후 §3.3 프로젝트 디렉토리 표준 구조 섹션 추가.
 - (2026-06-08) 프론트엔드 디자인 정체성(Map-First UI, Glassmorphism, Color Palette, Interaction & Motion) 규칙을 §7.5에 추가.
 - (2026-06-05) `docs/specs/rest-api-spec.md`·`Read Only Api.spec.md`를 본 문서로 병합·삭제(SSOT 단일화). 도메인 상세는 §2.1·§4·§5·§7·§8.1로 흡수. JWT 값(Access 30분/Refresh 14일/Redis `rt:{userId}`)은 §10 원안 유지로 확정.
