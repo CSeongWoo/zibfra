@@ -65,7 +65,12 @@ http.interceptors.response.use(
         authStore.clearAllAuth();
         const { default: router } = await import('../router');
         router.push('/login');
-        return Promise.reject(error);
+        return Promise.reject({
+          error: 'REFRESH_TOKEN_MISSING',
+          message: 'Refresh Token이 없어 세션을 복구할 수 없습니다. 다시 로그인해주세요.',
+          timestamp: null,
+          status: 401,
+        });
       }
 
       if (isRefreshing) {
