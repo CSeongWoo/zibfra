@@ -15,14 +15,15 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * {@link MapService} 구현. PostGIS 읽기 전용(§3: SUPPORTS, spatialTransactionManager 단독).
+ * {@link MapService} 구현. PostGIS 읽기 전용(§3: SUPPORTS, spatialTransactionManager
+ * 단독).
  */
 @Service
 public class MapServiceImpl implements MapService {
 
     static final int ZOOM_MIN = 1;
     static final int ZOOM_MAX = 21;
-    static final int ZOOM_THRESHOLD_IN = 15;   // >= : DETAIL, 그 미만: SUMMARY
+    static final int ZOOM_THRESHOLD_IN = 15; // >= : DETAIL, 그 미만: SUMMARY
     static final double MAX_DIAGONAL_M = 150_000.0;
     static final int MAX_PAGE_SIZE = 200;
     static final int DEFAULT_SIZE = 100;
@@ -35,8 +36,7 @@ public class MapServiceImpl implements MapService {
     }
 
     @Override
-    @Transactional(transactionManager = "spatialTransactionManager",
-            readOnly = true, propagation = Propagation.SUPPORTS)
+    @Transactional(transactionManager = "spatialTransactionManager", readOnly = true, propagation = Propagation.SUPPORTS)
     public MarkerResponse getMarkers(String bboxRaw, int zoom, Integer page, Integer size) {
         if (zoom < ZOOM_MIN || zoom > ZOOM_MAX) {
             throw new ApiException(ErrorCode.ZOOM_OUT_OF_RANGE,

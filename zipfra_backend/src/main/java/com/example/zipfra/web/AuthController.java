@@ -4,6 +4,7 @@ import com.example.zipfra.dto.auth.LoginRequest;
 import com.example.zipfra.dto.auth.SignupRequest;
 import com.example.zipfra.dto.auth.TokenDto;
 import com.example.zipfra.dto.auth.TokenResponse;
+import com.example.zipfra.exception.ApiException;
 import com.example.zipfra.exception.ErrorCode;
 import com.example.zipfra.security.ZipfraPrincipal;
 import com.example.zipfra.service.AuthService;
@@ -62,7 +63,7 @@ public class AuthController {
         String refreshToken = getRefreshTokenFromCookie(request);
         log.info("Refresh 시작");
         if (refreshToken == null) {
-            throw new ZipfraException(ErrorCode.REFRESH_TOKEN_INVALID);
+            throw new ApiException(ErrorCode.REFRESH_TOKEN_INVALID);
         }
 
         TokenDto tokenDto = authService.refresh(refreshToken);
@@ -84,7 +85,7 @@ public class AuthController {
                                        @AuthenticationPrincipal ZipfraPrincipal principal) {
         String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            throw new ZipfraException(ErrorCode.TOKEN_MISSING);
+            throw new ApiException(ErrorCode.TOKEN_MISSING);
         }
         String accessToken = authHeader.substring(7);
 

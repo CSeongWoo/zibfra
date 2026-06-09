@@ -19,7 +19,8 @@ public final class BboxValidator {
     /**
      * 검증 순서(§2.1 T-1): 형식 → 좌표 뒤바뀜 → 범위.
      *
-     * @throws ApiException BBOX_PARSE_ERROR / BBOX_COORD_SWAPPED / BBOX_INVALID_RANGE
+     * @throws ApiException BBOX_PARSE_ERROR / BBOX_COORD_SWAPPED /
+     *                      BBOX_INVALID_RANGE
      */
     public static Bbox parse(String raw) {
         if (raw == null) {

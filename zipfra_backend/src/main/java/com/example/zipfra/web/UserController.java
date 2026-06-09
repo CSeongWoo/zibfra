@@ -2,6 +2,7 @@ package com.example.zipfra.web;
 
 import com.example.zipfra.domain.User;
 import com.example.zipfra.dto.user.UserProfileResponse;
+import com.example.zipfra.exception.ApiException;
 import com.example.zipfra.exception.ErrorCode;
 import com.example.zipfra.mapper.mysql.UserMapper;
 import com.example.zipfra.security.ZipfraPrincipal;
@@ -25,11 +26,11 @@ public class UserController {
     @GetMapping("/me")
     public ResponseEntity<UserProfileResponse> getMyProfile(@AuthenticationPrincipal ZipfraPrincipal principal) {
         if (principal == null) {
-            throw new ZipfraException(ErrorCode.USER_NOT_FOUND);
+            throw new ApiException(ErrorCode.USER_NOT_FOUND);
         }
 
         User user = userMapper.findById(principal.getId())
-                .orElseThrow(() -> new ZipfraException(ErrorCode.USER_NOT_FOUND));
+                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
 
         return ResponseEntity.ok(UserProfileResponse.from(user));
     }

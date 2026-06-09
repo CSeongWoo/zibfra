@@ -19,6 +19,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 
 @SpringBootTest
 @Import(JwtSecurityTest.TestController.class)
@@ -92,6 +93,7 @@ public class JwtSecurityTest {
         mockMvc.perform(post("/api/v1/location/score")
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isUnauthorized())
+                .andExpect(header().string("X-Api-Version", "1"))
                 .andExpect(jsonPath("$.error").value("TOKEN_MISSING"))
                 .andExpect(jsonPath("$.message").value("Authorization header is missing or invalid"))
                 .andExpect(jsonPath("$.timestamp").exists());
@@ -114,6 +116,7 @@ public class JwtSecurityTest {
                         .header("Authorization", "Bearer " + expiredToken)
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isUnauthorized())
+                .andExpect(header().string("X-Api-Version", "1"))
                 .andExpect(jsonPath("$.error").value("TOKEN_EXPIRED"))
                 .andExpect(jsonPath("$.message").value("Access Token has expired"));
     }
@@ -127,6 +130,7 @@ public class JwtSecurityTest {
                         .header("Authorization", "Bearer " + invalidToken)
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isForbidden())
+                .andExpect(header().string("X-Api-Version", "1"))
                 .andExpect(jsonPath("$.error").value("TOKEN_INVALID"))
                 .andExpect(jsonPath("$.message").value("Signature is invalid or token is malformed"));
     }
@@ -151,6 +155,7 @@ public class JwtSecurityTest {
         mockMvc.perform(post("/api/v1/reviews")
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isUnauthorized())
+                .andExpect(header().string("X-Api-Version", "1"))
                 .andExpect(jsonPath("$.error").value("TOKEN_MISSING"));
     }
 
@@ -158,6 +163,7 @@ public class JwtSecurityTest {
     public void Valid_Token_Should_Allow_Protected_Access() throws Exception {
         String validToken = jwtUtil.generateAccessToken(1L, "test@test.com");
         org.mockito.BDDMockito.given(redisTemplate.hasKey("bl:" + validToken)).willReturn(false);
+        org.mockito.BDDMockito.given(redisTemplate.hasKey("rt:1")).willReturn(true);
 
         mockMvc.perform(post("/api/v1/location/score")
                         .header("Authorization", "Bearer " + validToken)
@@ -169,11 +175,13 @@ public class JwtSecurityTest {
     public void Protected_With_Blacklisted_Token_Should_Return_401_TOKEN_BLACKLISTED() throws Exception {
         String token = jwtUtil.generateAccessToken(1L, "test@test.com");
         org.mockito.BDDMockito.given(redisTemplate.hasKey("bl:" + token)).willReturn(true);
+        org.mockito.BDDMockito.given(redisTemplate.hasKey("rt:1")).willReturn(true);
 
         mockMvc.perform(post("/api/v1/location/score")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isUnauthorized())
+                .andExpect(header().string("X-Api-Version", "1"))
                 .andExpect(jsonPath("$.error").value("TOKEN_BLACKLISTED"))
                 .andExpect(jsonPath("$.message").value("Token has been blacklisted (logged out)"));
     }

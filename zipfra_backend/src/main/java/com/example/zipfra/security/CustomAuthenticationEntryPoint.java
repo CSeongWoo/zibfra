@@ -1,5 +1,7 @@
 package com.example.zipfra.security;
 
+import com.example.zipfra.exception.ErrorResponse;
+import com.example.zipfra.exception.ErrorCode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -11,8 +13,6 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.time.Instant;
-import java.util.HashMap;
-import java.util.Map;
 
 @Component
 public class CustomAuthenticationEntryPoint implements AuthenticationEntryPoint {
@@ -45,12 +45,10 @@ public class CustomAuthenticationEntryPoint implements AuthenticationEntryPoint 
         response.setStatus(status);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");
+        response.setHeader("X-Api-Version", "1");
 
-        Map<String, Object> body = new HashMap<>();
-        body.put("error", errorCode);
-        body.put("message", message);
-        body.put("timestamp", Instant.now().toString());
+        ErrorResponse errorResponse = new ErrorResponse(errorCode, message, Instant.now().toString());
 
-        response.getWriter().write(objectMapper.writeValueAsString(body));
+        response.getWriter().write(objectMapper.writeValueAsString(errorResponse));
     }
 }
