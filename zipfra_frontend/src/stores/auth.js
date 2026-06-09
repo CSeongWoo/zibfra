@@ -4,7 +4,6 @@ import {
   login as apiLogin,
   signup as apiSignup,
   logout as apiLogout,
-  refresh as apiRefresh,
   getProfile as apiGetProfile,
 } from '../api/auth';
 
