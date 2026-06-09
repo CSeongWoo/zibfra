@@ -7,9 +7,9 @@ import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { useMapStore } from '@/stores/map';
 import { kakaoBoundsToBbox } from '@/utils/bbox';
 
-// 초기 중심/줌(기본: 서울시청). 마커 데이터(MAP-01)는 Phase 2 Dev A가 `markers`로 주입.
+// 초기 중심/줌(기본: 강남 삼성동 — 실거래 데이터 밀집 지역). 마커 데이터(MAP-01)는 `markers`로 주입.
 const props = defineProps({
-  center: { type: Object, default: () => ({ lat: 37.5665, lng: 126.978 }) },
+  center: { type: Object, default: () => ({ lat: 37.5072, lng: 127.0533 }) },
   level: { type: Number, default: 5 },
   markers: { type: Array, default: () => [] }, // [{ id, lat, lng }]
 });

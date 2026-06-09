@@ -13,7 +13,7 @@ spring:
     # primaryDataSource — MySQL (쓰기·인증)
     primary:
       driver-class-name: com.mysql.cj.jdbc.Driver
-      url: jdbc:mysql://${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DB}?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true
+      jdbc-url: jdbc:mysql://${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DB}?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true
       username: ${MYSQL_USER}
       password: ${MYSQL_PASSWORD}
       hikari:
@@ -24,7 +24,7 @@ spring:
     # spatialDataSource — PostGIS (읽기·공간 분석)
     spatial:
       driver-class-name: org.postgresql.Driver
-      url: jdbc:postgresql://${PG_HOST}:${PG_PORT}/${PG_DB}
+      jdbc-url: jdbc:postgresql://${PG_HOST}:${PG_PORT}/${PG_DB}
       username: ${PG_USER}
       password: ${PG_PASSWORD}
       hikari:

@@ -18,7 +18,7 @@
 
     <!-- Map workspace -->
     <main class="workspace">
-      <KakaoMap @viewport-change="onViewport" @marker-click="onMarkerClick" />
+      <MapContainer @viewport-change="onViewport" @marker-click="onMarkerClick" />
 
       <div class="map-overlay glass-panel">
         <h3>실시간 뷰포트 (§7 · §8)</h3>
@@ -30,7 +30,7 @@
           <dt>last propertyId</dt>
           <dd>{{ lastPropertyId ?? '–' }}</dd>
         </dl>
-        <p class="hint">지도를 움직이면 bbox가 갱신됩니다. 마커는 Phase 2(MAP-01)에서 주입됩니다.</p>
+        <p class="hint">지도를 움직이면 bbox·zoom으로 MAP-01을 호출해 마커를 갱신합니다(줌인=DETAIL 점마커).</p>
       </div>
     </main>
   </div>
@@ -38,7 +38,7 @@
 
 <script setup>
 import { ref } from 'vue';
-import KakaoMap from '@/components/map/KakaoMap.vue';
+import MapContainer from '@/components/map/MapContainer.vue';
 import { useMapStore } from '@/stores/map';
 
 const mapStore = useMapStore();
