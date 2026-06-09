@@ -1,8 +1,8 @@
 package com.example.zipfra.util;
 
 import com.example.zipfra.dto.map.Bbox;
-import com.example.zipfra.web.ApiException;
-import com.example.zipfra.web.ErrorCode;
+import com.example.zipfra.exception.ApiException;
+import com.example.zipfra.exception.ErrorCode;
 
 /**
  * bbox 문자열 파싱·검증 (MAP-01, §8 공통 규약 + §8.3 에러).

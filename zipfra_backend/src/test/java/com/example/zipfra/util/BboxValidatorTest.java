@@ -4,8 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.example.zipfra.dto.map.Bbox;
-import com.example.zipfra.web.ApiException;
-import com.example.zipfra.web.ErrorCode;
+import com.example.zipfra.exception.ApiException;
+import com.example.zipfra.exception.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

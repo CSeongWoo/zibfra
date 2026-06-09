@@ -11,8 +11,8 @@ import java.util.List;
 
 import com.example.zipfra.dto.map.MarkerResponse;
 import com.example.zipfra.mapper.postgis.MarkerMapper;
-import com.example.zipfra.web.ApiException;
-import com.example.zipfra.web.ErrorCode;
+import com.example.zipfra.exception.ApiException;
+import com.example.zipfra.exception.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

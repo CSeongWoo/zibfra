@@ -24,7 +24,7 @@ public interface MapService {
      * @param page  0-based 페이지(생략 시 0, DETAIL 에서만 의미)
      * @param size  페이지 크기(생략 시 100, 최대 200, DETAIL 에서만 의미)
      * @return DETAIL 또는 SUMMARY 응답
-     * @throws com.example.zipfra.web.ApiException 검증 실패 시(위 판정 규칙)
+     * @throws com.example.zipfra.exception.ApiException 검증 실패 시(위 판정 규칙)
      */
     MarkerResponse getMarkers(String bbox, int zoom, Integer page, Integer size);
 }
