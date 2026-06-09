@@ -3,7 +3,6 @@ package com.example.zipfra.web;
 import com.example.zipfra.domain.User;
 import com.example.zipfra.dto.user.UserProfileResponse;
 import com.example.zipfra.exception.ErrorCode;
-import com.example.zipfra.exception.ZipfraException;
 import com.example.zipfra.mapper.mysql.UserMapper;
 import com.example.zipfra.security.ZipfraPrincipal;
 import lombok.RequiredArgsConstructor;

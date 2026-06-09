@@ -5,7 +5,6 @@ import com.example.zipfra.dto.auth.LoginRequest;
 import com.example.zipfra.dto.auth.SignupRequest;
 import com.example.zipfra.dto.auth.TokenDto;
 import com.example.zipfra.exception.ErrorCode;
-import com.example.zipfra.exception.ZipfraException;
 import com.example.zipfra.mapper.mysql.UserMapper;
 import com.example.zipfra.security.JwtUtil;
 import io.jsonwebtoken.Claims;

@@ -5,7 +5,6 @@ import com.example.zipfra.dto.auth.SignupRequest;
 import com.example.zipfra.dto.auth.TokenDto;
 import com.example.zipfra.dto.auth.TokenResponse;
 import com.example.zipfra.exception.ErrorCode;
-import com.example.zipfra.exception.ZipfraException;
 import com.example.zipfra.security.ZipfraPrincipal;
 import com.example.zipfra.service.AuthService;
 import jakarta.servlet.http.Cookie;
