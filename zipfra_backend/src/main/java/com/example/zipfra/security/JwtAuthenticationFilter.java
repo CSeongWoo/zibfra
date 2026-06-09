@@ -48,12 +48,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     request.setAttribute("exception", "TOKEN_BLACKLISTED");
                 } else {
                     Claims claims = jwtUtil.parseClaims(token);
-                    ZipfraPrincipal principal = new ZipfraPrincipal(claims);
-                    UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                            principal, null, principal.getAuthorities()
-                    );
-                    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                    String userId = claims.getSubject();
+                    
+                    if (Boolean.FALSE.equals(redisTemplate.hasKey("rt:" + userId))) {
+                        // Redis가 초기화되었거나 RT가 없는 경우, 세션 만료 처리 (즉시 401 반환)
+                        request.setAttribute("exception", "TOKEN_EXPIRED");
+                    } else {
+                        ZipfraPrincipal principal = new ZipfraPrincipal(claims);
+                        UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                                principal, null, principal.getAuthorities()
+                        );
+                        authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                        SecurityContextHolder.getContext().setAuthentication(authentication);
+                    }
                 }
             } catch (ExpiredJwtException e) {
                 request.setAttribute("exception", "TOKEN_EXPIRED");

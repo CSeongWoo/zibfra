@@ -62,7 +62,7 @@ http.interceptors.response.use(
       if (!hasRefreshToken || hasRefreshToken === 'null' || hasRefreshToken === 'undefined') {
         const { useAuthStore } = await import('../stores/auth');
         const authStore = useAuthStore();
-        authStore.clearAccessToken();
+        authStore.clearAllAuth();
         const { default: router } = await import('../router');
         router.push('/login');
         return Promise.reject(error);
@@ -107,7 +107,7 @@ http.interceptors.response.use(
         
         const { useAuthStore } = await import('../stores/auth');
         const authStore = useAuthStore();
-        authStore.clearAccessToken();
+        authStore.clearAllAuth();
 
         const { default: router } = await import('../router');
         router.push('/login');

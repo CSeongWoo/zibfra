@@ -35,23 +35,23 @@ let isInitialAuthChecked = false;
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore();
 
-  // 보호 구역 접근 제어
-  if (to.meta.requiresAuth) {
-    // 최초 1회에 한해 세션 복구 수행 (아직 복구 시도를 안 했고 미인증 상태인 경우만)
-    if (!isInitialAuthChecked) {
-      isInitialAuthChecked = true;
-      if (!authStore.isAuthenticated) {
-        const hasRefreshToken = localStorage.getItem('refresh_token');
-        if (hasRefreshToken && hasRefreshToken !== 'null' && hasRefreshToken !== 'undefined') {
-          try {
-            await authStore.checkAuth();
-          } catch (e) {
-            console.warn('[Router] Initial auth restore failed on protected route:', e);
-          }
-        }
+  // 최초 1회에 한해 세션 복구 수행 (스토리지에 기존 토큰 흔적이 있고 아직 검사하지 않은 경우)
+  if (!isInitialAuthChecked) {
+    isInitialAuthChecked = true;
+    const hasRefreshToken = localStorage.getItem('refresh_token');
+    const hasAccessToken = localStorage.getItem('access_token');
+    if ((hasRefreshToken && hasRefreshToken !== 'null' && hasRefreshToken !== 'undefined') || hasAccessToken) {
+      try {
+        await authStore.checkAuth();
+      } catch (e) {
+        console.warn('[Router] Initial session restore failed:', e);
+        authStore.clearAllAuth();
       }
     }
+  }
 
+  // 보호 구역 접근 제어
+  if (to.meta.requiresAuth) {
     if (!authStore.isAuthenticated) {
       console.warn(`[Router] Protected route ${to.path} requires login. Redirecting to /login.`);
       return next('/login');

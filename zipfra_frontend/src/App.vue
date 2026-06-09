@@ -2,11 +2,11 @@
   <div class="app-container animate-fade-in">
     <!-- Header -->
     <header class="app-header glass-panel">
-      <div class="logo">
+      <router-link to="/" class="logo" style="text-decoration: none; color: inherit; cursor: pointer;">
         <span class="logo-icon">🏙️</span>
         <h1>Zipfra</h1>
         <span class="badge badge-info">Map Base</span>
-      </div>
+      </router-link>
 
       <div class="header-actions">
         <div class="status-indicator">
