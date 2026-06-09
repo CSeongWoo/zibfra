@@ -36,6 +36,10 @@ public class CustomAuthenticationEntryPoint implements AuthenticationEntryPoint 
             status = HttpServletResponse.SC_FORBIDDEN;
             errorCode = "TOKEN_INVALID";
             message = "Signature is invalid or token is malformed";
+        } else if ("TOKEN_BLACKLISTED".equals(exception)) {
+            status = HttpServletResponse.SC_UNAUTHORIZED;
+            errorCode = "TOKEN_BLACKLISTED";
+            message = "Token has been blacklisted (logged out)";
         }
 
         response.setStatus(status);

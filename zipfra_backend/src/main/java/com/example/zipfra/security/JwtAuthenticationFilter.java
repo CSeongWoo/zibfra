@@ -7,6 +7,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
@@ -18,9 +19,19 @@ import java.io.IOException;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
+    private final RedisTemplate<String, String> redisTemplate;
 
-    public JwtAuthenticationFilter(JwtUtil jwtUtil) {
+    public JwtAuthenticationFilter(JwtUtil jwtUtil, RedisTemplate<String, String> redisTemplate) {
         this.jwtUtil = jwtUtil;
+        this.redisTemplate = redisTemplate;
+    }
+
+    @Override
+    protected boolean shouldNotFilter(jakarta.servlet.http.HttpServletRequest request) throws jakarta.servlet.ServletException {
+        String path = request.getRequestURI();
+        return path.equals("/api/v1/auth/signup") ||
+               path.equals("/api/v1/auth/login") ||
+               path.equals("/api/v1/auth/refresh");
     }
 
     @Override
@@ -33,13 +44,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             request.setAttribute("exception", "TOKEN_MISSING");
         } else {
             try {
-                Claims claims = jwtUtil.parseClaims(token);
-                ZipfraPrincipal principal = new ZipfraPrincipal(claims);
-                UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                        principal, null, principal.getAuthorities()
-                );
-                authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(authentication);
+                if (Boolean.TRUE.equals(redisTemplate.hasKey("bl:" + token))) {
+                    request.setAttribute("exception", "TOKEN_BLACKLISTED");
+                } else {
+                    Claims claims = jwtUtil.parseClaims(token);
+                    ZipfraPrincipal principal = new ZipfraPrincipal(claims);
+                    UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                            principal, null, principal.getAuthorities()
+                    );
+                    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                }
             } catch (ExpiredJwtException e) {
                 request.setAttribute("exception", "TOKEN_EXPIRED");
             } catch (JwtException | IllegalArgumentException e) {

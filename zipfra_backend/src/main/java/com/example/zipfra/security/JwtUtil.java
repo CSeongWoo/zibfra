@@ -1,6 +1,7 @@
 package com.example.zipfra.security;
 
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
@@ -20,6 +21,9 @@ public class JwtUtil {
 
     @Value("${jwt.access-token-expiration-ms:1800000}") // 30분
     private long accessTokenExpirationMs;
+
+    @Value("${jwt.refresh-token-expiration-ms:1209600000}") // 14일
+    private long refreshTokenExpirationMs;
 
     private Key key;
 
@@ -41,11 +45,35 @@ public class JwtUtil {
                 .compact();
     }
 
+    public String generateRefreshToken(Long userId) {
+        Date now = new Date();
+        Date expiryDate = new Date(now.getTime() + refreshTokenExpirationMs);
+
+        return Jwts.builder()
+                .setSubject(String.valueOf(userId))
+                .setIssuedAt(now)
+                .setExpiration(expiryDate)
+                .signWith(key, SignatureAlgorithm.HS256)
+                .compact();
+    }
+
     public Claims parseClaims(String token) {
         return Jwts.parserBuilder()
                 .setSigningKey(key)
                 .build()
                 .parseClaimsJws(token)
                 .getBody();
+    }
+
+    public long getRemainingExpirationMs(String token) {
+        try {
+            Claims claims = parseClaims(token);
+            Date expiration = claims.getExpiration();
+            return Math.max(0, expiration.getTime() - System.currentTimeMillis());
+        } catch (ExpiredJwtException e) {
+            return 0;
+        } catch (Exception e) {
+            return 0;
+        }
     }
 }
