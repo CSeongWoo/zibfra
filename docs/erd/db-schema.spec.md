@@ -10,7 +10,7 @@
 |------|------|------|
 | 물리 분리 | MySQL(쓰기/인증) ↔ PostGIS(읽기/공간) | §4 double-write 금지 및 독립 커넥션 풀 운영 |
 | Cross-DB FK | 생성 안 함, ID 논리 참조만 | DB 물리 분리 및 이종 DBMS 환경 분리 |
-| Same-DB FK | `reviews.user_id → users.id`만 실제 FK | 둘 다 MySQL 내 존재 |
+| Same-DB FK | `reviews.user_id → users.id`, `favorites.user_id → users.id`만 실제 FK | 둘 다 MySQL 내 존재 |
 | 공간 인덱스 | `geometry(Point, 4326)` + GiST + Functional Geog Index | §4 및 geography 캐스팅 시 인덱스 스킵 문제 방지 |
 | PK | 단일 BIGINT AUTO_INCREMENT / BIGSERIAL | 안정성 및 표준 식별자 체계 |
 | AREA 식별자 | `target_id`를 `VARCHAR(20)`로 설계. **AREA 리뷰 입도 = 법정동(동) 10자리 확정** | 법정동코드 앞자리 `0` 누락 방지 + 동 단위 차별화. (줌아웃 집계 `region_summary`는 별개로 시군구 단위 유지) |
@@ -64,6 +64,13 @@ erDiagram
         datetime    updated_at
     }
 
+    mysql_favorites {
+        bigint      id PK "AUTO_INCREMENT"
+        bigint      user_id FK "→ users.id"
+        bigint      property_id "논리참조(PostGIS pg_real_estate_sales.id)"
+        datetime    created_at
+    }
+
     %% ========= PostGIS (spatialDataSource) =========
     pg_real_estate_sales {
         bigint      id PK "BIGSERIAL"
@@ -106,13 +113,16 @@ erDiagram
 
     %% ---- 실제 FK (동일 DB: MySQL) ----
     mysql_users ||--o{ mysql_reviews : "writes"
+    mysql_users ||--o{ mysql_favorites : "owns"
 
     %% ---- 논리 참조 (Cross-DB, FK 없음: 점선) ----
     pg_real_estate_sales ||..o{ mysql_reviews        : "target(BUILDING)"
     pg_region_summary    ||..o{ mysql_reviews        : "target(AREA)"
     pg_real_estate_sales ||..o{ mysql_ai_summaries   : "PROPERTY/BUILDING"
     pg_region_summary    ||..o{ mysql_ai_summaries   : "AREA"
+    pg_real_estate_sales ||..o{ mysql_favorites      : "property"
     pg_real_estate_sales }o..o{ pg_poi               : "공간조인(ST_DWithin)"
+
 ```
 
 > Redis(`refresh_token`)는 키-값 구조: `refresh_token:{user_id}` → 토큰, `TTL = refresh 만료(예: 14d)`. 로그아웃/회전 시 키 삭제.
@@ -122,8 +132,9 @@ erDiagram
 ### MySQL (primaryDataSource)
 
 #### `users` — 회원
+
 | 컬럼 | 타입 | 제약 | 설명 |
-|------|------|------|------|
+| --- | --- | --- | --- |
 | `id` | BIGINT | PK, AUTO_INCREMENT | 회원 식별자 |
 | `email` | VARCHAR(255) | UNIQUE, NOT NULL | 로그인 ID, JWT subject |
 | `password_hash` | VARCHAR(255) | NOT NULL | BCrypt 해시(평문 금지) |
@@ -136,8 +147,9 @@ erDiagram
 인덱스: `uk_users_email(email)`.
 
 #### `reviews` — 리뷰
+
 | 컬럼 | 타입 | 제약 | 설명 |
-|------|------|------|------|
+| --- | --- | --- | --- |
 | `id` | BIGINT | PK, AUTO_INCREMENT | 리뷰 식별자 |
 | `user_id` | BIGINT | NOT NULL, FK → users.id | 작성자 (동일 DB 내 실제 FK 생성) |
 | `target_type` | VARCHAR(20) | NOT NULL, CHECK IN ('BUILDING','AREA') | 대상 구분 |
@@ -151,8 +163,9 @@ erDiagram
 인덱스: `idx_reviews_target_created(target_type, target_id, created_at DESC)`.
 
 #### `ai_summaries` — AI 요약 캐시
+
 | 컬럼 | 타입 | 제약 | 설명 |
-|------|------|------|------|
+| --- | --- | --- | --- |
 | `id` | BIGINT | PK, AUTO_INCREMENT | 캐시 식별자 |
 | `summary_type` | VARCHAR(20) | NOT NULL, CHECK IN ('PROPERTY_INFO','REVIEW') | 기능 구분 |
 | `target_type` | VARCHAR(20) | NOT NULL, CHECK IN ('PROPERTY','BUILDING','AREA') | 대상 종류 |
@@ -169,6 +182,17 @@ erDiagram
 | `updated_at` | DATETIME | NOT NULL, ON UPDATE CURRENT_TIMESTAMP | 수정 시각 |
 
 인덱스: `uk_ai_summary_lookup(summary_type, target_type, target_id)`(upsert), `idx_ai_expires_at(expires_at)`.
+
+#### `favorites` — 즐겨찾기
+
+| 컬럼 | 타입 | 제약 | 설명 |
+| --- | --- | --- | --- |
+| `id` | BIGINT | PK, AUTO_INCREMENT | 즐겨찾기 식별자 |
+| `user_id` | BIGINT | NOT NULL, FK → users.id | 회원 식별자 (동일 DB 내 실제 FK 생성) |
+| `property_id` | BIGINT | NOT NULL | 매물 식별자 (PostGIS pg_real_estate_sales.id 논리 참조) |
+| `created_at` | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 생성 시각 |
+
+인덱스: `uk_favorites_user_property(user_id, property_id)`(중복 즐겨찾기 방지 및 사용자별 조회 가속화).
 
 ---
 
@@ -282,7 +306,6 @@ DO
   WHERE expires_at < NOW();
 ```
 
-> ⚠️ **운영 주의**
-> - `SET GLOBAL event_scheduler = ON`은 **런타임 설정이라 재시작 시 휘발**된다. 영속화하려면 `my.cnf`에 `event_scheduler=ON`을 박는다. `CREATE EVENT`/`SET GLOBAL`은 `EVENT`·`SYSTEM_VARIABLES_ADMIN`(또는 `SUPER`) 권한 필요.
-> - 이 Event는 **정합성이 아니라 공간 회수용 housekeeping**이다. 캐시 조회는 항상 `WHERE expires_at > NOW()`로 만료분을 무시하고, 재생성은 `uk_ai_summary_lookup` 기준 upsert로 덮어쓰므로 만료 행이 남아 있어도 오답을 주지 않는다.
-> - `STARTS`가 과거 시각이면 MySQL이 즉시 1회 실행 후 매일 반복한다(정상).
+
+### 2. 수정된 `mysql.sql`
+
