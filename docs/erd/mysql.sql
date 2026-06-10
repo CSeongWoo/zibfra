@@ -1,4 +1,5 @@
-```sql
+DROP DATABASE zipfra;
+
 -- 0. database: db 없을시 생성
 CREATE DATABASE IF NOT EXISTS `zipfra`;
 
@@ -6,7 +7,7 @@ CREATE DATABASE IF NOT EXISTS `zipfra`;
 CREATE TABLE users (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     email VARCHAR(255) NOT NULL UNIQUE,
-    password_hash VARCHAR(255) NOT NULL,
+    password VARCHAR(255) NOT NULL,
     nickname VARCHAR(50),
     role VARCHAR(20) NOT NULL DEFAULT 'USER',
     is_active BOOLEAN NOT NULL DEFAULT true,
@@ -66,5 +67,4 @@ CREATE EVENT ev_cleanup_ai_summaries
 ON SCHEDULE EVERY 1 DAY
 STARTS (CURRENT_DATE + INTERVAL 1 DAY + INTERVAL 3 HOUR) -- 새벽 3시 실행
 DO
-  DELETE FROM ai_summaries WHERE expires_at < NOW();
-```
+DELETE FROM ai_summaries WHERE expires_at < NOW();
