@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.zipfra.mapper.postgis.PoiMapper">
+
+    <!--
+      AGENTS.md §4: 미터 반경은 ::geography 캐스팅 필수.
+      gist_poi_geog 함수형 인덱스를 타려면 표현식이 인덱스 정의와 '문자 그대로' 동일해야 한다.
+      typmod(::geography(Point,4326)) 를 붙이면 인덱스 스킵(풀스캔) → 절대 금지.
+      distance_meters → distanceMeters 는 map-underscore-to-camel-case 로 매핑.
+    -->
+    <select id="findWithin" resultType="com.example.zipfra.dto.location.PoiDistanceDTO">
+        SELECT category,
+               ST_Distance(
+                   geom::geography,
+                   ST_SetSRID(ST_MakePoint(#{lon}, #{lat}), 4326)::geography
+               ) AS distance_meters
+        FROM poi
+        WHERE ST_DWithin(
+                  geom::geography,
+                  ST_SetSRID(ST_MakePoint(#{lon}, #{lat}), 4326)::geography,
+                  #{radiusMeters}
+              )
+    </select>
+
+    <!--
+      AGENTS.md §5: ENV_PENALTY 는 서울(법정동 11*) 좌표에서만 산출.
+      행정경계 단일행 테이블 seoul_boundary 로 ST_Contains 판정(geometry 비교, geography 캐스팅 불필요).
+    -->
+    <select id="isInSeoul" resultType="boolean">
+        SELECT EXISTS(
+            SELECT 1
+            FROM seoul_boundary
+            WHERE ST_Contains(geom, ST_SetSRID(ST_MakePoint(#{lon}, #{lat}), 4326))
+        )
+    </select>
+
+</mapper>

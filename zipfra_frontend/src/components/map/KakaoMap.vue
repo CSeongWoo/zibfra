@@ -15,13 +15,14 @@ const props = defineProps({
 });
 
 // §7.4: 지도는 상세 로직 없이 이벤트만 발신한다.
-const emit = defineEmits(['marker-click', 'viewport-change']);
+const emit = defineEmits(['marker-click', 'viewport-change', 'map-click']);
 
 const mapContainer = ref(null);
 const mapStore = useMapStore();
 
 let map = null;
 let idleListener = null;
+let clickListener = null;
 const markerObjects = [];
 
 function syncViewport() {
@@ -56,6 +57,12 @@ function initMap() {
   });
   idleListener = () => syncViewport();
   kakao.maps.event.addListener(map, 'idle', idleListener);
+  // LOC-01: 지도 클릭 좌표만 발신(상세 계산은 상위에서). §7.4 단방향.
+  clickListener = (mouseEvent) => {
+    const latlng = mouseEvent.latLng;
+    emit('map-click', { lat: latlng.getLat(), lng: latlng.getLng() });
+  };
+  kakao.maps.event.addListener(map, 'click', clickListener);
   renderMarkers();
   syncViewport(); // 초기 1회
 }
@@ -76,12 +83,14 @@ onMounted(() => {
 onUnmounted(() => {
   // §7 규약: 리스너·인스턴스 해제
   const { kakao } = window;
-  if (map && idleListener && kakao?.maps) {
-    kakao.maps.event.removeListener(map, 'idle', idleListener);
+  if (map && kakao?.maps) {
+    if (idleListener) kakao.maps.event.removeListener(map, 'idle', idleListener);
+    if (clickListener) kakao.maps.event.removeListener(map, 'click', clickListener);
   }
   markerObjects.forEach((m) => m.setMap(null));
   markerObjects.length = 0;
   idleListener = null;
+  clickListener = null;
   map = null;
 });
 </script>

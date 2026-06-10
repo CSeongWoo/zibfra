@@ -39,6 +39,14 @@ public enum ErrorCode {
     /** kangwon — 페이지 size 가 상한(200)을 초과 */
     PAGE_SIZE_EXCEEDED(HttpStatus.BAD_REQUEST, "size 가 상한(200)을 초과했습니다."),
 
+    // ==== [LOC-01 입지 점수 - kangwon] §8.3 ====
+    /** kangwon — lon/lat 좌표가 허용 범위를 벗어남 (lon[-180,180], lat[-90,90]) */
+    COORD_OUT_OF_RANGE(HttpStatus.BAD_REQUEST, "lon/lat 좌표가 허용 범위를 벗어났습니다."),
+    /** kangwon — radiusMeters 가 [100,3000] 범위를 벗어남 */
+    RADIUS_OUT_OF_RANGE(HttpStatus.BAD_REQUEST, "radiusMeters 는 100~3000 범위여야 합니다."),
+    /** kangwon — weights 값이 [0.0,1.0] 범위를 벗어남 */
+    WEIGHT_OUT_OF_RANGE(HttpStatus.BAD_REQUEST, "weights 값은 0.0~1.0 범위여야 합니다."),
+
     // ==== [공통] ====
     INVALID_PARAM(HttpStatus.BAD_REQUEST, "잘못된 요청 파라미터입니다."),
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.");
