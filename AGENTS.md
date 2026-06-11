@@ -218,10 +218,11 @@ spec 파일이 없으므로 게이트는 **PR 리뷰**로 강제한다.
 
   (더 가파른 감쇠 필요 시 지수형 `W=(1/4)^((t-5)/5)`로 교체, 그러면 15분=1/16. 교체 시 §8 기록.)
 - **거리→도보시간 환산(확정)**: 도보 **80m/분(4.8km/h)** → `t = 거리(m) / 80`. 기본 반경 1,500m(≈19분), `radiusMeters` 오버라이드 범위 `[100, 3000]`.
-- **카테고리 키**: ESSENTIAL = `pharmacy`·`mart`·`bank` (one_is_enough) / LEISURE = `restaurant`·`cafe`·`cinema` (more_is_better) / ENV_PENALTY = `noise`(소음)·`waste`(혐오시설), 모델 `PENALTY`. 응답 `breakdown`은 `essential`/`leisure`/`env_penalty`로 분리, `finalScore = Σ contribution`(전 카테고리, 오차 ±0.001).
+- **카테고리 키**: ESSENTIAL = `pharmacy`·`mart`·`bank` (one_is_enough) / LEISURE = `restaurant`·`cafe`·`cinema` (more_is_better) / TRANSIT = `subway`(지하철역, one_is_enough)·`bus_stop`(버스정류장, more_is_better) / ENV_PENALTY = `noise`(소음)·`waste`(혐오시설), 모델 `PENALTY`. 응답 `breakdown`은 `essential`/`leisure`/`transit`/`env_penalty`로 분리, `finalScore = Σ contribution`(전 카테고리, 오차 ±0.001).
 - **ENV_PENALTY(감점)**: 서울(법정동 `11*`) 좌표에서만 계산, **서울 외 좌표는 항목 자체 제외(0점 처리 금지)**. 가중치 `[0.0,1.0]`이나 감점이므로 `contribution`은 음수.
 - **필수 공급**(약국·마트·은행) = 가장 가까운 1개의 W만(One is enough, 중복 가산 금지).
 - **미식·여가**(식당·카페·영화관, 상권정보 출처) = 반경 내 전부 `Σ W`(more is better).
+- **교통**(지하철역·버스정류장, 공공데이터 출처) = 지하철은 가장 가까운 1개의 W만(one is enough), 버스정류장은 반경 내 전부 `Σ W`(more is better). **ENV_PENALTY와 달리 전국 적용**(서울 제한 없음). 교통 POI 적재 전까지 응답은 `count:0`(점수 0).
 - **환경 지도점검**(서울 한정) = 가까울수록 감점 항목. **서울 외 좌표는 0점이 아니라 항목 제외.**
 - 최종 = `Σ(카테고리 기본점수 × 사용자 가중치 0.0~1.0)`. POI 추출=PostGIS, 감쇠·합산=백엔드 메모리.
 
@@ -537,6 +538,7 @@ final = sum(score.values())
 - 실거래가: `https://www.data.go.kr/data/3050988/fileData.do` (전국)
 - 법정동코드: `https://www.code.go.kr/stdcode/regCodeL.do`
 - 상권정보: `https://www.data.go.kr/data/15083033/fileData.do` → 미식·여가 POI로 매핑
+- 교통(지하철역·버스정류장): 국가대중교통DB/국토부 역사정보 등 공공데이터 → `subway`·`bus_stop` POI로 매핑(TRANSIT 그룹, §5). **적재 미완료 상태**(틀만 선반영).
 - 적재: 심야 배치 + §7 요약 지표 동시 갱신. retry 정책·스테이징 테이블·중복 검사 명시.
 
 ## 10. JWT 인증 및 Redis 활용 규약
@@ -566,6 +568,7 @@ final = sum(score.values())
 규칙·수식·스택이 현실과 어긋나면 편법 코드 금지. 멈추고 **이 문서를 먼저 고친다.** 변경 시 사유를 PR에 남긴다.
 
 **변경 이력**
+- (2026-06-11) 입지 점수(§5)에 TRANSIT 그룹 신설 — `subway`(지하철역, one_is_enough)·`bus_stop`(버스정류장, more_is_better), 전국 적용. 응답 `breakdown`에 `transit` 키 추가(§5). 교통 POI 데이터 적재는 미완료(틀만 선반영, 적재 전 `count:0`). PR #6 리뷰(CSeongWoo) 반영.
 - (2026-06-08) 프론트엔드 최초 랜딩 시 불필요한 토큰 재발급(refresh) 호출 제거 및 보호 구역(requiresAuth) 기반 세션 복구/리다이렉션 무한 루프 방지 로직 구현.
 - (2026-06-08) Phase 2 회원 인증(AUTH) 및 사용자 기능 풀스택 구현 완료 (MyBatis/MySQL/Redis 연동 백엔드 API 및 테스트 패스 + Vue 3/Pinia/Axios 자동 토큰 갱신(RTR) 및 Glassmorphism UI 프론트엔드).
 - (2026-06-08) 백엔드 및 프론트엔드 파일 구조 파악 후 §3.3 프로젝트 디렉토리 표준 구조 섹션 추가.

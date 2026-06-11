@@ -8,6 +8,7 @@
     :markers="markers"
     @viewport-change="onViewport"
     @marker-click="(propertyId) => emit('marker-click', propertyId)"
+    @map-click="(coord) => emit('map-click', coord)"
   />
 </template>
 
@@ -17,7 +18,7 @@ import KakaoMap from '@/components/map/KakaoMap.vue';
 import { useMapStore } from '@/stores/map';
 import { fetchMarkers } from '@/api/markers';
 
-const emit = defineEmits(['marker-click', 'viewport-change']);
+const emit = defineEmits(['marker-click', 'viewport-change', 'map-click']);
 
 const mapStore = useMapStore();
 const markers = ref([]); // KakaoMap 이 그릴 점마커 [{ id, lat, lng }]

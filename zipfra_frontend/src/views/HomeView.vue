@@ -1,6 +1,6 @@
 <template>
   <main class="workspace animate-fade-in">
-    <KakaoMap @viewport-change="onViewport" @marker-click="onMarkerClick" />
+    <MapContainer @viewport-change="onViewport" @marker-click="onMarkerClick" @map-click="onMapClick" />
 
     <div class="map-overlay glass-panel">
       <h3>실시간 뷰포트 (§7 · §8)</h3>
@@ -13,6 +13,37 @@
         <dd>{{ lastPropertyId ?? '–' }}</dd>
       </dl>
       <p class="hint">지도를 움직이면 bbox가 갱신됩니다. 마커는 Phase 2(MAP-01)에서 주입됩니다.</p>
+
+      <!-- LOC-01: 지도 클릭 지점 입지 점수 (가중치 전부 1.0 고정) -->
+      <hr />
+      <h3>입지 점수 (LOC-01)</h3>
+      <p v-if="!score && !scoreError" class="hint">지도를 클릭하면 그 지점의 입지 점수를 계산합니다.</p>
+      <p v-if="scoreLoading" class="hint">계산 중…</p>
+      <p v-if="scoreError" class="hint" style="color: var(--color-danger, #ef4444);">{{ scoreError }}</p>
+
+      <template v-if="score">
+        <dl>
+          <dt>좌표</dt>
+          <dd>{{ score.lon.toFixed(5) }}, {{ score.lat.toFixed(5) }}</dd>
+          <dt>반경</dt>
+          <dd>{{ score.radiusMeters }}m</dd>
+          <dt>finalScore</dt>
+          <dd><strong>{{ score.finalScore }}</strong></dd>
+        </dl>
+        <dl>
+          <template v-for="(grp, key) in score.breakdown" :key="key">
+            <dt>{{ key }}</dt>
+            <dd>
+              <span v-if="grp.applicable === false">제외(서울 외)</span>
+              <span v-else>{{ grp.score }}</span>
+            </dd>
+            <template v-for="(cat, cname) in grp.categories" :key="cname">
+              <dt style="padding-left: 12px; color: var(--text-tertiary);">· {{ cname }}</dt>
+              <dd>{{ cat.contribution }} <span style="color: var(--text-tertiary);">({{ cat.count }}개)</span></dd>
+            </template>
+          </template>
+        </dl>
+      </template>
     </div>
 
     <!-- Phase 2 Demo Actions -->
@@ -35,14 +66,42 @@
 
 <script setup>
 import { ref } from 'vue';
+import MapContainer from '@/components/map/MapContainer.vue';
 import KakaoMap from '@/components/map/KakaoMap.vue';
 import FavoriteButton from '@/components/favorite/FavoriteButton.vue';
 import ReviewModal from '@/components/review/ReviewModal.vue';
 import { useMapStore } from '@/stores/map';
+import { fetchLocationScore } from '@/api/location';
 
 const mapStore = useMapStore();
 const lastPropertyId = ref(null);
 const isReviewModalOpen = ref(false);
+
+// LOC-01 데모: 가중치는 전 카테고리 1.0 고정(점수가 보이도록).
+const DEMO_WEIGHTS = {
+  pharmacy: 1, mart: 1, bank: 1,
+  restaurant: 1, cafe: 1, cinema: 1,
+  noise: 1, waste: 1,
+};
+
+const score = ref(null);
+const scoreError = ref(null);
+const scoreLoading = ref(false);
+
+async function onMapClick({ lat, lng }) {
+  scoreLoading.value = true;
+  scoreError.value = null;
+  try {
+    score.value = await fetchLocationScore({ lon: lng, lat, weights: DEMO_WEIGHTS });
+  } catch (e) {
+    score.value = null;
+    scoreError.value = e.status === 401
+      ? '로그인이 필요합니다 (Protected).'
+      : `${e.error ?? '오류'}: ${e.message ?? ''}`;
+  } finally {
+    scoreLoading.value = false;
+  }
+}
 
 function onViewport({ bbox, level }) {
   // mapStore는 KakaoMap 내부에서 이미 갱신함. 여기선 데모용 로그.
