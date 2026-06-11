@@ -14,16 +14,35 @@
       </dl>
       <p class="hint">지도를 움직이면 bbox가 갱신됩니다. 마커는 Phase 2(MAP-01)에서 주입됩니다.</p>
     </div>
+
+    <!-- Phase 2 Demo Actions -->
+    <div class="demo-actions glass-panel" v-if="lastPropertyId">
+      <h4>선택된 매물 (ID: {{ lastPropertyId }})</h4>
+      <div class="actions-row">
+        <FavoriteButton :propertyId="lastPropertyId" />
+        <button class="review-btn" @click="isReviewModalOpen = true">리뷰 보기</button>
+      </div>
+    </div>
+
+    <ReviewModal 
+      :isOpen="isReviewModalOpen"
+      targetType="BUILDING"
+      :targetId="String(lastPropertyId)"
+      @close="isReviewModalOpen = false"
+    />
   </main>
 </template>
 
 <script setup>
 import { ref } from 'vue';
 import KakaoMap from '@/components/map/KakaoMap.vue';
+import FavoriteButton from '@/components/favorite/FavoriteButton.vue';
+import ReviewModal from '@/components/review/ReviewModal.vue';
 import { useMapStore } from '@/stores/map';
 
 const mapStore = useMapStore();
 const lastPropertyId = ref(null);
+const isReviewModalOpen = ref(false);
 
 function onViewport({ bbox, level }) {
   // mapStore는 KakaoMap 내부에서 이미 갱신함. 여기선 데모용 로그.
@@ -85,5 +104,44 @@ function onMarkerClick(propertyId) {
   color: var(--text-tertiary);
   font-size: 11px;
   line-height: 1.5;
+}
+
+.demo-actions {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 5;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  min-width: 250px;
+}
+
+.demo-actions h4 {
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.actions-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.review-btn {
+  padding: 8px 16px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.review-btn:hover {
+  background: var(--bg-secondary);
+  border-color: var(--accent-color);
 }
 </style>

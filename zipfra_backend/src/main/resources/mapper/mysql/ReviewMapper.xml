@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.zipfra.mapper.mysql.ReviewMapper">
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO reviews (user_id, target_type, target_id, content, encrypted_content, rating, created_at, updated_at)
+        VALUES (#{userId}, #{targetType}, #{targetId}, #{content}, #{encryptedContent}, #{rating}, NOW(), NOW())
+    </insert>
+
+    <select id="findByTarget" resultType="com.example.zipfra.dto.review.ReviewResponse">
+        SELECT r.id, r.user_id as userId, u.nickname as nickname,
+               r.target_type as targetType, r.target_id as targetId,
+               r.content, r.rating, r.created_at as createdAt, r.updated_at as updatedAt
+        FROM reviews r
+        JOIN users u ON r.user_id = u.id
+        WHERE r.target_type = #{targetType} AND r.target_id = #{targetId}
+        ORDER BY r.created_at DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countByTarget" resultType="long">
+        SELECT COUNT(*)
+        FROM reviews
+        WHERE target_type = #{targetType} AND target_id = #{targetId}
+    </select>
+
+</mapper>

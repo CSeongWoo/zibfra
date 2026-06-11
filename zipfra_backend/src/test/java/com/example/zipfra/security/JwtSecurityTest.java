@@ -51,6 +51,12 @@ public class JwtSecurityTest {
     @org.springframework.test.context.bean.override.mockito.MockitoBean
     private org.springframework.data.redis.core.RedisTemplate<String, String> redisTemplate;
 
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    private com.example.zipfra.service.MapService mapService;
+
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    private com.example.zipfra.service.ReviewService reviewService;
+
     @org.springframework.beans.factory.annotation.Value("${jwt.secret}")
     private String secretKey;
 
@@ -68,21 +74,6 @@ public class JwtSecurityTest {
     public static class TestController {
         @PostMapping("/api/v1/location/score")
         public String mockLocationScore() {
-            return "ok";
-        }
-
-        @GetMapping("/api/v1/map/markers")
-        public String mockMapMarkers() {
-            return "ok";
-        }
-
-        @GetMapping("/api/v1/reviews")
-        public String mockGetReviews() {
-            return "ok";
-        }
-
-        @PostMapping("/api/v1/reviews")
-        public String mockPostReviews() {
             return "ok";
         }
     }
@@ -137,14 +128,30 @@ public class JwtSecurityTest {
 
     @Test
     public void T_6_4_Public_Markers_Without_Token_Should_Return_200_OK() throws Exception {
+        org.mockito.BDDMockito.given(mapService.getMarkers(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .willReturn(com.example.zipfra.dto.map.MarkerResponse.summary(java.util.Collections.emptyList(), false));
+
         mockMvc.perform(get("/api/v1/map/markers")
+                        .param("bbox", "126.9,37.4,127.1,37.6")
+                        .param("zoom", "10")
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk());
     }
 
     @Test
     public void T_6_5_Public_Reviews_Without_Token_Should_Return_200_OK() throws Exception {
+        org.mockito.BDDMockito.given(reviewService.getReviews(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyInt()))
+                .willReturn(com.example.zipfra.dto.review.PageResponse.<com.example.zipfra.dto.review.ReviewResponse>builder()
+                        .content(java.util.Collections.emptyList())
+                        .page(0)
+                        .size(10)
+                        .totalElements(0)
+                        .hasNext(false)
+                        .build());
+
         mockMvc.perform(get("/api/v1/reviews")
+                        .param("targetType", "BUILDING")
+                        .param("targetId", "1")
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk());
     }

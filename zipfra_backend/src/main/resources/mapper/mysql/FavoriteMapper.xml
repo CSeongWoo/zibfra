@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.zipfra.mapper.mysql.FavoriteMapper">
+
+    <select id="existsByUserIdAndPropertyId" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1 FROM favorites
+            WHERE user_id = #{userId} AND property_id = #{propertyId}
+        )
+    </select>
+
+    <insert id="insert">
+        INSERT INTO favorites (user_id, property_id, created_at)
+        VALUES (#{userId}, #{propertyId}, NOW())
+    </insert>
+
+    <delete id="delete">
+        DELETE FROM favorites
+        WHERE user_id = #{userId} AND property_id = #{propertyId}
+    </delete>
+
+    <select id="findByUserId" resultType="com.example.zipfra.dto.favorite.FavoriteDto">
+        SELECT id, property_id as propertyId, created_at as createdAt
+        FROM favorites
+        WHERE user_id = #{userId}
+        ORDER BY created_at DESC
+    </select>
+
+</mapper>
