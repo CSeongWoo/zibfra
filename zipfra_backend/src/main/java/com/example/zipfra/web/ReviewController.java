@@ -11,8 +11,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Map;
-
 import jakarta.validation.Valid;
 
 @RestController
@@ -23,18 +21,14 @@ public class ReviewController {
     private final ReviewService reviewService;
 
     @PostMapping
-    public ResponseEntity<?> createReview(@AuthenticationPrincipal ZipfraPrincipal principal,
-                                          @Valid @RequestBody ReviewRequest request) {
+    public ResponseEntity<Void> createReview(@AuthenticationPrincipal ZipfraPrincipal principal,
+                                             @Valid @RequestBody ReviewRequest request) {
         if (principal == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "TOKEN_MISSING"));
+            throw new com.example.zipfra.exception.ApiException(com.example.zipfra.exception.ErrorCode.TOKEN_MISSING);
         }
 
-        try {
-            reviewService.createReview(principal.getId(), request);
-            return ResponseEntity.ok().build();
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", "INTERNAL_SERVER_ERROR"));
-        }
+        reviewService.createReview(principal.getId(), request);
+        return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
     @GetMapping
