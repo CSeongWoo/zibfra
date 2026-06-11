@@ -11,7 +11,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { toggleFavorite, getFavorites } from '@/api/favorite';
 import { useAuthStore } from '@/stores/auth';
 import { useRouter } from 'vue-router';
