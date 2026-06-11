@@ -36,8 +36,15 @@ public class ReviewController {
             @RequestParam String targetType,
             @RequestParam String targetId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
-            
+            @RequestParam(defaultValue = "20") int size) {
+
+        if (page < 0 || size < 1 || size > 50) {
+            throw new com.example.zipfra.exception.ApiException(
+                    com.example.zipfra.exception.ErrorCode.INVALID_PARAM,
+                    "page must be >= 0 and size must be between 1 and 50"
+            );
+        }
+
         PageResponse<ReviewResponse> response = reviewService.getReviews(targetType, targetId, page, size);
         return ResponseEntity.ok(response);
     }
