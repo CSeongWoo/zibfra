@@ -8,9 +8,9 @@ import java.util.Map;
 /**
  * LOC-01 입지 점수 응답 (AGENTS.md §5·§8.1).
  *
- * <p>breakdown 키는 essential/leisure/env_penalty(snake_case 고정).
- * env_penalty 는 서울(법정동 11*) 좌표일 때만 산출되며, 서울 외에서는
- * applicable=false 로 표기하고 finalScore 합산에서 제외한다(0점 처리 금지).
+ * <p>breakdown 키는 essential/leisure/transit/env_penalty(snake_case 고정).
+ * transit 은 전국 적용(서울 제한 없음). env_penalty 는 서울(법정동 11*) 좌표일 때만
+ * 산출되며, 서울 외에서는 applicable=false 로 표기하고 finalScore 합산에서 제외한다(0점 처리 금지).
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record ScoreResponse(
@@ -25,6 +25,7 @@ public record ScoreResponse(
     public record Breakdown(
             GroupResult essential,
             GroupResult leisure,
+            GroupResult transit,
             @JsonProperty("env_penalty") GroupResult envPenalty
     ) {}
 

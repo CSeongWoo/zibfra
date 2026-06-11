@@ -127,6 +127,28 @@ class LocationScoreCalculatorTest {
     }
 
     @Test
+    @DisplayName("TRANSIT: subway one_is_enough + bus_stop more_is_better, 서울 외에도 전국 적용")
+    void transit_subwayAndBusStop_appliedNationwide() {
+        var result = calculator.calculate(
+                List.of(poi("SUBWAY", 320), poi("BUS_STOP", 200), poi("BUS_STOP", 600)),
+                Map.of("subway", 1.0, "bus_stop", 0.9),
+                false);   // 서울 외 좌표여도 TRANSIT 은 산출됨(ENV_PENALTY 와 대비)
+
+        ScoreResponse.GroupResult transit = result.breakdown().transit();
+        // subway: t=4.0 ≤ 5 → W=1.0, w=1.0 → contribution 1.000
+        assertThat(transit.categories().get("subway").base()).isEqualTo(1.0);
+        assertThat(transit.categories().get("subway").contribution()).isEqualTo(1.000);
+        // bus_stop: W=[1.0, 0.4444] Σ=1.4444, w=0.9 → contribution 1.300
+        ScoreResponse.CategoryScore bus = transit.categories().get("bus_stop");
+        assertThat(bus.count()).isEqualTo(2);
+        assertThat(bus.base()).isCloseTo(1.4444, within(0.0001));
+        assertThat(bus.contribution()).isEqualTo(1.300);
+        // 그룹 합 + finalScore (서울 외에도 빠지지 않음)
+        assertThat(transit.score()).isEqualTo(2.300);
+        assertThat(result.finalScore()).isEqualTo(2.300);
+    }
+
+    @Test
     @DisplayName("생략된 가중치는 0.0 으로 간주되어 contribution 0")
     void omittedWeight_treatedAsZero() {
         var result = calculator.calculate(

@@ -3,6 +3,7 @@ package com.example.zipfra.controller;
 import com.example.zipfra.dto.location.ScoreRequest;
 import com.example.zipfra.dto.location.ScoreResponse;
 import com.example.zipfra.service.LocationScoreService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,13 +18,10 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/v1/location")
+@RequiredArgsConstructor
 public class LocationController {
 
     private final LocationScoreService locationScoreService;
-
-    public LocationController(LocationScoreService locationScoreService) {
-        this.locationScoreService = locationScoreService;
-    }
 
     @PostMapping("/score")
     public ResponseEntity<ScoreResponse> score(@RequestBody ScoreRequest request) {

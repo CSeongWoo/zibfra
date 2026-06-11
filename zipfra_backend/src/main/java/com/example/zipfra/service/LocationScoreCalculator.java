@@ -77,6 +77,8 @@ public class LocationScoreCalculator {
                 groupResult(Category.Group.ESSENTIAL, categoriesByGroup, scoreByGroup, null);
         ScoreResponse.GroupResult leisure =
                 groupResult(Category.Group.LEISURE, categoriesByGroup, scoreByGroup, null);
+        ScoreResponse.GroupResult transit =
+                groupResult(Category.Group.TRANSIT, categoriesByGroup, scoreByGroup, null);
         ScoreResponse.GroupResult envPenalty = inSeoul
                 ? groupResult(Category.Group.ENV_PENALTY, categoriesByGroup, scoreByGroup, Boolean.TRUE)
                 : new ScoreResponse.GroupResult(Boolean.FALSE, null, null);
@@ -84,10 +86,11 @@ public class LocationScoreCalculator {
         double finalScore = round(
                 scoreByGroup.getOrDefault(Category.Group.ESSENTIAL, 0.0)
                         + scoreByGroup.getOrDefault(Category.Group.LEISURE, 0.0)
+                        + scoreByGroup.getOrDefault(Category.Group.TRANSIT, 0.0)
                         + (inSeoul ? scoreByGroup.getOrDefault(Category.Group.ENV_PENALTY, 0.0) : 0.0),
                 3);
 
-        return new CalcResult(new ScoreResponse.Breakdown(essential, leisure, envPenalty), finalScore);
+        return new CalcResult(new ScoreResponse.Breakdown(essential, leisure, transit, envPenalty), finalScore);
     }
 
     private Map<Category, List<Double>> groupDistances(List<PoiDistanceDTO> pois) {

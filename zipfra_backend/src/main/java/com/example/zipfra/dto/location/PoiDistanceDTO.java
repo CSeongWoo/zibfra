@@ -11,7 +11,7 @@ import lombok.Setter;
 @Setter
 public class PoiDistanceDTO {
 
-    /** poi.category 원본(PHARMACY|MART|BANK|RESTAURANT|CAFE|CINEMA|NOISE|WASTE) */
+    /** poi.category 원본(PHARMACY|MART|BANK|RESTAURANT|CAFE|CINEMA|SUBWAY|BUS_STOP|NOISE|WASTE) */
     private String category;
 
     /** ST_Distance(::geography) 결과(미터) */

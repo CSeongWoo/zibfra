@@ -10,6 +10,7 @@ import java.util.Optional;
  * <ul>
  *   <li>ESSENTIAL(pharmacy·mart·bank) = one_is_enough (가장 가까운 1개의 W만)</li>
  *   <li>LEISURE(restaurant·cafe·cinema) = more_is_better (반경 내 전부 ΣW)</li>
+ *   <li>TRANSIT(subway·bus_stop) = 지하철 one_is_enough / 버스 more_is_better (전국 적용)</li>
  *   <li>ENV_PENALTY(noise·waste) = penalty (ΣW, contribution 음수, 서울 한정)</li>
  * </ul>
  */
@@ -21,11 +22,13 @@ public enum Category {
     RESTAURANT("restaurant", Group.LEISURE, Model.MORE_IS_BETTER),
     CAFE("cafe", Group.LEISURE, Model.MORE_IS_BETTER),
     CINEMA("cinema", Group.LEISURE, Model.MORE_IS_BETTER),
+    SUBWAY("subway", Group.TRANSIT, Model.ONE_IS_ENOUGH),
+    BUS_STOP("bus_stop", Group.TRANSIT, Model.MORE_IS_BETTER),
     NOISE("noise", Group.ENV_PENALTY, Model.PENALTY),
     WASTE("waste", Group.ENV_PENALTY, Model.PENALTY);
 
     /** breakdown 그룹 (응답 키와 1:1). */
-    public enum Group { ESSENTIAL, LEISURE, ENV_PENALTY }
+    public enum Group { ESSENTIAL, LEISURE, TRANSIT, ENV_PENALTY }
 
     /** 산출 모델. */
     public enum Model { ONE_IS_ENOUGH, MORE_IS_BETTER, PENALTY }
