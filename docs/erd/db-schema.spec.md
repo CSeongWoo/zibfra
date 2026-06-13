@@ -89,8 +89,8 @@ erDiagram
     pg_poi {
         bigint      id PK "BIGSERIAL"
         varchar     name
-        varchar     category "PHARMACY|MART|BANK|RESTAURANT|CAFE|CINEMA"
-        varchar     category_group "ESSENTIAL | LEISURE | ENV"
+        varchar     category "SUBWAY|BUS_STOP|SCHOOL|ACADEMY|RESTAURANT|CAFE|CINEMA|MART|CONVENIENCE_STORE|HOSPITAL|PHARMACY|BANK"
+        varchar     category_group "TRANSIT | EDUCATION | COMMERCE | CONVENIENCE"
         varchar     address
         geometry    geom "Point, 4326 (GiST 인덱스)"
         timestamptz created_at
@@ -220,8 +220,8 @@ erDiagram
 |------|------|------|------|
 | `id` | BIGINT | PK (IDENTITY) | POI 식별자 |
 | `name` | VARCHAR(200) | NOT NULL | 상호/시설명 |
-| `category` | VARCHAR(30) | NOT NULL | 세부 분류 |
-| `category_group` | VARCHAR(20) | NOT NULL | ESSENTIAL / LEISURE / ENV |
+| `category` | VARCHAR(30) | NOT NULL | 세부 분류 (SUBWAY/BUS_STOP/SCHOOL/ACADEMY/RESTAURANT/CAFE/CINEMA/MART/CONVENIENCE_STORE/HOSPITAL/PHARMACY/BANK) |
+| `category_group` | VARCHAR(20) | NOT NULL | TRANSIT / EDUCATION / COMMERCE / CONVENIENCE (§5 4분류, ENV 폐기) |
 | `address` | VARCHAR(255) | NULL | 주소 |
 | `geom` | geometry(Point, 4326) | NOT NULL | 좌표 (WGS84, 공간 인덱싱) |
 | `created_at` | TIMESTAMPTZ | NOT NULL, DEFAULT now() | 적재 시각 |

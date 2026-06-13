@@ -33,13 +33,10 @@
         <dl>
           <template v-for="(grp, key) in score.breakdown" :key="key">
             <dt>{{ key }}</dt>
-            <dd>
-              <span v-if="grp.applicable === false">제외(서울 외)</span>
-              <span v-else>{{ grp.score }}</span>
-            </dd>
+            <dd>{{ grp.score }} <span style="color: var(--text-tertiary);">(가중치 {{ grp.weight }})</span></dd>
             <template v-for="(cat, cname) in grp.categories" :key="cname">
               <dt style="padding-left: 12px; color: var(--text-tertiary);">· {{ cname }}</dt>
-              <dd>{{ cat.contribution }} <span style="color: var(--text-tertiary);">({{ cat.count }}개)</span></dd>
+              <dd>base {{ cat.base }} <span style="color: var(--text-tertiary);">({{ cat.count }}개)</span></dd>
             </template>
           </template>
         </dl>
@@ -77,11 +74,9 @@ const mapStore = useMapStore();
 const lastPropertyId = ref(null);
 const isReviewModalOpen = ref(false);
 
-// LOC-01 데모: 가중치는 전 카테고리 1.0 고정(점수가 보이도록).
+// LOC-01 데모: 가중치는 그룹 단위 4개(§5 재편), 전부 1.0 고정(점수가 보이도록).
 const DEMO_WEIGHTS = {
-  pharmacy: 1, mart: 1, bank: 1,
-  restaurant: 1, cafe: 1, cinema: 1,
-  noise: 1, waste: 1,
+  transit: 1, education: 1, commerce: 1, convenience: 1,
 };
 
 const score = ref(null);

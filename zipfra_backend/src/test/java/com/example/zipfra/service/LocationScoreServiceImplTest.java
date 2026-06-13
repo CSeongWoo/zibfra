@@ -54,18 +54,17 @@ class LocationScoreServiceImplTest {
     @Test
     @DisplayName("정상: radiusMeters 생략 시 기본 1500, Mock POI 로 점수 산출")
     void score_defaultRadius_ok() {
-        // Mock 이 "약국 320m 1개 있다"고 응답하도록 미리 지정
-        when(poiMapper.isInSeoul(anyDouble(), anyDouble())).thenReturn(false);
+        // Mock 이 "약국 320m 1개 있다"고 응답하도록 미리 지정 (pharmacy → convenience 그룹)
         PoiDistanceDTO pharmacy = new PoiDistanceDTO();
         pharmacy.setCategory("PHARMACY");
         pharmacy.setDistanceMeters(320);
         when(poiMapper.findWithin(anyDouble(), anyDouble(), anyInt())).thenReturn(List.of(pharmacy));
 
         ScoreResponse response = service().score(
-                request(127.0533, 37.5072, null, Map.of("pharmacy", 0.8)));
+                request(127.0533, 37.5072, null, Map.of("convenience", 0.8)));
 
         assertThat(response.radiusMeters()).isEqualTo(1500);     // 기본값 적용
-        assertThat(response.finalScore()).isEqualTo(0.800);
+        assertThat(response.finalScore()).isEqualTo(0.800);      // pharmacy W=1.0, convenience w=0.8
         verify(poiMapper).findWithin(127.0533, 37.5072, 1500);   // 기본 반경으로 호출됐는지 검증
     }
 
@@ -92,7 +91,7 @@ class LocationScoreServiceImplTest {
     @DisplayName("weights 값 1.1 → WEIGHT_OUT_OF_RANGE")
     void score_weightOutOfRange() {
         assertThatThrownBy(() -> service().score(
-                request(127.0, 37.5, 1500, Map.of("mart", 1.1))))
+                request(127.0, 37.5, 1500, Map.of("commerce", 1.1))))
                 .isInstanceOf(ApiException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.WEIGHT_OUT_OF_RANGE);
     }

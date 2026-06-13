@@ -63,9 +63,10 @@ spec 파일이 없으므로 게이트는 **PR 리뷰**로 강제한다.
 | T-6 | `POST /ai/property-summary` 헤더 없음 | `401 TOKEN_MISSING` |
 | T-6 | `POST /ai/review-summary` 헤더 없음 | `401 TOKEN_MISSING` |
 | T-6 | `GET /map/markers` 헤더 없음 (Public) | `200 OK` |
-| **T-7** | pharmacy 1개, 320m → t=4.0, W=1.0, w=0.8 | contribution=**0.800** |
-| T-7 | mart 1개, 850m → t=10.625, W=1/(10.625/5)²=0.2213, w=0.6 | contribution=**0.133** |
-| T-7 | restaurant 2개 [200m,600m] → t=[2.5,7.5], W=[1.0,0.4444], Σ=1.4444, w=0.9 | contribution=**1.300** |
+| **T-7** | subway 1개, 320m → t=4.0, W=1.0 (one_is_enough) | base=**1.000** |
+| T-7 | mart 1개, 850m → t=10.625, W=1/(10.625/5)²≈0.2215 (more_is_better) | base=**0.2215**, commerce w=0.6 → 기여 0.133 |
+| T-7 | academy 2개 [200m,600m] → t=[2.5,7.5], W=[1.0,0.4444], Σ=1.4444 (more_is_better, education w=1.0) | score=**1.444** |
+| T-7 | env_penalty/서울 한정 케이스 | **폐기**(§5 재편, 4분류 전부 양수) |
 | **T-8** | LLM 타임아웃(>10초) | `200` + `summaryAvailable:false`, `summary:null` |
 | T-8 | LLM 500 오류 | `200` + `summaryAvailable:false`, `summary:null` |
 | T-8 | 리뷰 0건 (`reviewCount:0`) | `200` + `summaryAvailable:false`, `positives:null` |
@@ -210,31 +211,42 @@ spec 파일이 없으므로 게이트는 **PR 리뷰**로 강제한다.
 | SRID | 저장 EPSG:4326(`geometry`), 거리 연산 시 `::geography` 캐스팅 |
 
 ## 5. 입지 점수
+
+> **(2026-06-13, §11) 와이어프레임 4분류로 카테고리 전면 재편.** 기존 ESSENTIAL/LEISURE/ENV_PENALTY 폐기 → 교통/교육/상업/편의 4그룹. 거리 감쇠 엔진(W)·모델(one_is_enough/more_is_better)은 유지. 가중치는 **그룹 단위**(와이어프레임 페르소나 슬라이더 4개)로 변경. ENV 감점·서울 한정 로직(`isInSeoul`·`seoul_boundary`) 완전 제거. PR #12 반영.
+
 - 거리 감쇠: `t ≤ 5 → W=1`, `t > 5 → W = 1/(t/5)²`.
 
 | t | 5 | 10 | 15 | 20 |
 |---|---|----|----|----|
 | W | 1 | 1/4 | 1/9 | 1/16 |
 
-  (더 가파른 감쇠 필요 시 지수형 `W=(1/4)^((t-5)/5)`로 교체, 그러면 15분=1/16. 교체 시 §8 기록.)
+  (더 가파른 감쇠 필요 시 지수형 `W=(1/4)^((t-5)/5)`로 교체, 그러면 15분=1/16. 교체 시 §11 기록.)
 - **거리→도보시간 환산(확정)**: 도보 **80m/분(4.8km/h)** → `t = 거리(m) / 80`. 기본 반경 1,500m(≈19분), `radiusMeters` 오버라이드 범위 `[100, 3000]`.
-- **카테고리 키**: ESSENTIAL = `pharmacy`·`mart`·`bank` (one_is_enough) / LEISURE = `restaurant`·`cafe`·`cinema` (more_is_better) / TRANSIT = `subway`(지하철역, one_is_enough)·`bus_stop`(버스정류장, more_is_better) / ENV_PENALTY = `noise`(소음)·`waste`(혐오시설), 모델 `PENALTY`. 응답 `breakdown`은 `essential`/`leisure`/`transit`/`env_penalty`로 분리, `finalScore = Σ contribution`(전 카테고리, 오차 ±0.001).
-- **ENV_PENALTY(감점)**: 서울(법정동 `11*`) 좌표에서만 계산, **서울 외 좌표는 항목 자체 제외(0점 처리 금지)**. 가중치 `[0.0,1.0]`이나 감점이므로 `contribution`은 음수.
-- **필수 공급**(약국·마트·은행) = 가장 가까운 1개의 W만(One is enough, 중복 가산 금지).
-- **미식·여가**(식당·카페·영화관, 상권정보 출처) = 반경 내 전부 `Σ W`(more is better).
-- **교통**(지하철역·버스정류장, 공공데이터 출처) = 지하철은 가장 가까운 1개의 W만(one is enough), 버스정류장은 반경 내 전부 `Σ W`(more is better). **ENV_PENALTY와 달리 전국 적용**(서울 제한 없음). 교통 POI 적재 전까지 응답은 `count:0`(점수 0).
-- **환경 지도점검**(서울 한정) = 가까울수록 감점 항목. **서울 외 좌표는 0점이 아니라 항목 제외.**
-- 최종 = `Σ(카테고리 기본점수 × 사용자 가중치 0.0~1.0)`. POI 추출=PostGIS, 감쇠·합산=백엔드 메모리.
+- **카테고리 4분류**(전부 양수, 감점 없음). 응답 `breakdown`은 `transit`/`education`/`commerce`/`convenience`로 분리, `finalScore = Σ(그룹 기여)`(오차 ±0.001):
+
+| 그룹 | breakdown 키 | POI 카테고리 (모델) | 출처 |
+|------|------|------|------|
+| 🚇 교통 | `transit` | `subway`(지하철역, one_is_enough) · `bus_stop`(버스정류장, more_is_better) | 공공데이터 |
+| 🏫 학교·학원 | `education` | `school`(초·중·고, one_is_enough) · `academy`(학원, more_is_better) | 교육부 학교정보 등 |
+| 🛍 상업 | `commerce` | `restaurant`·`cafe`·`cinema`·`mart` (전부 more_is_better) | 상권정보 |
+| 🏪 편의 | `convenience` | `convenience_store`(편의점)·`hospital`(병원)·`pharmacy`(약국)·`bank`(은행) (전부 more_is_better) | 공공데이터 |
+
+- **모델**: `one_is_enough` = 가장 가까운 1개의 W만(중복 가산 금지) / `more_is_better` = 반경 내 전부 `Σ W`.
+- **전국 적용**(서울 제한 없음). POI 미적재 카테고리는 응답 `count:0`(점수 0). **신규 적재 대상**(`school`·`academy`·`hospital`·`convenience_store`·`mart`)은 별도 티켓(§9) — 적재 전까지 해당 카테고리 0점.
+- **가중치 = 그룹 단위 4개**: `weights` 키 = `transit`/`education`/`commerce`/`convenience`, 각 `[0.0, 1.0]`, 생략 시 0.0. (카테고리별 가중치 아님)
+- 최종 = `Σ(그룹 기본점수 × 그룹 가중치 0.0~1.0)`. 그룹 기본점수 = 그룹 소속 카테고리 base 의 합. POI 추출=PostGIS, 감쇠·합산=백엔드 메모리.
 
 ```
-for category in categories:
+for category in all_categories:
     pois = postgis_within(target, radius_m, category)   # ST_DWithin + ::geography
     if model[category] == "one_is_enough":
-        base = W(min(p.travel_time for p in pois)) if pois else 0
-    else:
-        base = sum(W(p.travel_time) for p in pois)
-    score[category] = base * user_weight[category]
-final = sum(score.values())
+        base[category] = W(min(p.travel_time for p in pois)) if pois else 0
+    else:  # more_is_better
+        base[category] = sum(W(p.travel_time) for p in pois)
+for group in [transit, education, commerce, convenience]:
+    group_base = sum(base[c] for c in categories_of(group))
+    contribution[group] = group_base * user_weight[group]
+final = sum(contribution.values())
 ```
 
 ## 6. AI 요약 기능
@@ -448,7 +460,7 @@ final = sum(score.values())
 | ID | Method | URI | 인증 | DB / 캐시 | 주요 제약 |
 |----|--------|-----|------|-----------|----------|
 | MAP-01 | `GET` | `/api/v1/map/markers` | Public | PostGIS / SUMMARY: `ETag`+`max-age=300`+SWR60, DETAIL: `no-store` | `bbox=minLng,minLat,maxLng,maxLat`(4326); `zoom` 1–21 서버 재판정(§7.1); 대각>150km 가드(§7.2); `size` max 200/def 100, `page` 0-based |
-| LOC-01 | `POST` | `/api/v1/location/score` | Protected | PostGIS→메모리 / `no-store` | GET+Body 금지; `lon`[-180,180], `lat`[-90,90], `radiusMeters`[100,3000] def 1500, `weights` 각[0.0,1.0] 생략=0.0; 응답 `breakdown`=`essential`/`leisure`/`env_penalty`(§5) |
+| LOC-01 | `POST` | `/api/v1/location/score` | Protected | PostGIS→메모리 / `no-store` | GET+Body 금지; `lon`[-180,180], `lat`[-90,90], `radiusMeters`[100,3000] def 1500, `weights`=그룹 4키(`transit`/`education`/`commerce`/`convenience`) 각[0.0,1.0] 생략=0.0; 응답 `breakdown`=`transit`/`education`/`commerce`/`convenience`(§5) |
 | PUB-01 | `GET` | `/api/v1/proxy/public-data` | Protected | PostGIS 배치 적재본 / 없음 | `type`=`REAL_ESTATE`\|`COMMERCE`; `regionCode` 10자리; `size` max 100/def 20; 전일 24:00 이전 데이터 |
 | PUB-02 | `GET` | `/api/v1/proxy/public-data/realtime` | Protected | 외부 API 직접 중계 / `no-store` | 배치 미반영 당일 단건 전용(대량 금지); `source`=`MOLIT_APT`\|`MOLIT_ROW`\|`COMMERCE`, `dealYear`, `dealMonth` 1–12, `lawd_cd` 5자리; 인증키 제거; retry 2회(1초) |
 
@@ -568,6 +580,7 @@ final = sum(score.values())
 규칙·수식·스택이 현실과 어긋나면 편법 코드 금지. 멈추고 **이 문서를 먼저 고친다.** 변경 시 사유를 PR에 남긴다.
 
 **변경 이력**
+- (2026-06-13) **입지 점수(§5) 카테고리 전면 재편** — 와이어프레임 4분류(교통/학교·학원/상업/편의)로 갈아엎음. 기존 ESSENTIAL/LEISURE/ENV_PENALTY 폐기, ENV 감점·서울 한정(`isInSeoul`·`seoul_boundary`) 로직 제거. 응답 `breakdown` 키 = `transit`/`education`/`commerce`/`convenience`, **가중치는 그룹 단위 4개**로 변경. 거리 감쇠 W공식·모델(one_is_enough/more_is_better)은 유지. 신규 POI(`school`·`academy`·`hospital`·`convenience_store`·`mart`) 적재는 별도 티켓(§9, 적재 전 `count:0`). 와이어프레임/페르소나 UI 정합 목적. PR #12.
 - (2026-06-11) 입지 점수(§5)에 TRANSIT 그룹 신설 — `subway`(지하철역, one_is_enough)·`bus_stop`(버스정류장, more_is_better), 전국 적용. 응답 `breakdown`에 `transit` 키 추가(§5). 교통 POI 데이터 적재는 미완료(틀만 선반영, 적재 전 `count:0`). PR #6 리뷰(CSeongWoo) 반영.
 - (2026-06-08) 프론트엔드 최초 랜딩 시 불필요한 토큰 재발급(refresh) 호출 제거 및 보호 구역(requiresAuth) 기반 세션 복구/리다이렉션 무한 루프 방지 로직 구현.
 - (2026-06-08) Phase 2 회원 인증(AUTH) 및 사용자 기능 풀스택 구현 완료 (MyBatis/MySQL/Redis 연동 백엔드 API 및 테스트 패스 + Vue 3/Pinia/Axios 자동 토큰 갱신(RTR) 및 Glassmorphism UI 프론트엔드).

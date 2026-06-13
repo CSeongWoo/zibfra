@@ -23,16 +23,4 @@
               )
     </select>
 
-    <!--
-      AGENTS.md §5: ENV_PENALTY 는 서울(법정동 11*) 좌표에서만 산출.
-      행정경계 단일행 테이블 seoul_boundary 로 ST_Contains 판정(geometry 비교, geography 캐스팅 불필요).
-    -->
-    <select id="isInSeoul" resultType="boolean">
-        SELECT EXISTS(
-            SELECT 1
-            FROM seoul_boundary
-            WHERE ST_Contains(geom, ST_SetSRID(ST_MakePoint(#{lon}, #{lat}), 4326))
-        )
-    </select>
-
 </mapper>

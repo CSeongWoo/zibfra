@@ -13,9 +13,6 @@ import java.util.List;
 @Mapper
 public interface PoiMapper {
 
-    /** 좌표가 서울(법정동 11*) 경계 내인지 — ENV_PENALTY 산출 게이트. */
-    boolean isInSeoul(@Param("lon") double lon, @Param("lat") double lat);
-
     /** 반경(m) 내 POI 를 카테고리·거리(m)와 함께 조회. */
     List<PoiDistanceDTO> findWithin(@Param("lon") double lon,
                                     @Param("lat") double lat,
