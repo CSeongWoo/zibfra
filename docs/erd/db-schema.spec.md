@@ -340,7 +340,3 @@ DO
   DELETE FROM ai_summaries 
   WHERE expires_at < NOW();
 ```
-
-
-### 2. 수정된 `mysql.sql`
-
