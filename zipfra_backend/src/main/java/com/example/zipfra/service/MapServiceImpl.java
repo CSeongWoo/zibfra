@@ -1,15 +1,21 @@
 package com.example.zipfra.service;
 
+import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import com.example.zipfra.dto.map.Bbox;
 import com.example.zipfra.dto.map.DealType;
 import com.example.zipfra.dto.map.MarkerDTO;
 import com.example.zipfra.dto.map.MarkerFilter;
 import com.example.zipfra.dto.map.MarkerResponse;
+import com.example.zipfra.dto.map.PoiMarkerDTO;
 import com.example.zipfra.dto.map.PropertyType;
 import com.example.zipfra.dto.map.RegionSummaryDTO;
 import com.example.zipfra.mapper.postgis.MarkerMapper;
+import com.example.zipfra.mapper.postgis.PoiMapper;
 import com.example.zipfra.util.BboxValidator;
 import com.example.zipfra.exception.ApiException;
 import com.example.zipfra.exception.ErrorCode;
@@ -33,9 +39,11 @@ public class MapServiceImpl implements MapService {
     static final int DEFAULT_PAGE = 0;
 
     private final MarkerMapper markerMapper;
+    private final PoiMapper poiMapper;
 
-    public MapServiceImpl(MarkerMapper markerMapper) {
+    public MapServiceImpl(MarkerMapper markerMapper, PoiMapper poiMapper) {
         this.markerMapper = markerMapper;
+        this.poiMapper = poiMapper;
     }
 
     @Override
@@ -100,5 +108,43 @@ public class MapServiceImpl implements MapService {
     private MarkerResponse summary(Bbox bbox, boolean oversized) {
         List<RegionSummaryDTO> regions = markerMapper.findRegionSummaries(bbox);
         return MarkerResponse.summary(regions, oversized);
+    }
+
+    @Override
+    @Transactional(transactionManager = "spatialTransactionManager", readOnly = true, propagation = Propagation.SUPPORTS)
+    public List<PoiMarkerDTO> getPois(String bboxRaw, String groupsCsv) {
+        if (groupsCsv == null || groupsCsv.isBlank()) {
+            return List.of();
+        }
+        // groups CSV(소문자 key) → Group enum 집합. 미일치 토큰은 무시.
+        Set<Category.Group> groups = Arrays.stream(groupsCsv.split(","))
+                .map(String::trim).filter(s -> !s.isEmpty())
+                .map(MapServiceImpl::toGroup).filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (groups.isEmpty()) {
+            return List.of();
+        }
+        // 선택 그룹 소속 category(대문자 enum 이름) → poi 조회.
+        List<String> categories = Arrays.stream(Category.values())
+                .filter(c -> groups.contains(c.group()))
+                .map(Enum::name).toList();
+
+        Bbox bbox = BboxValidator.parse(bboxRaw);
+        List<PoiMarkerDTO> pois = poiMapper.findInBbox(bbox, categories);
+        // DB 대문자 category → 소문자 key + group key 정규화(프론트 색칠용).
+        pois.forEach(p -> Category.fromDbCategory(p.getCategory()).ifPresent(c -> {
+            p.setCategory(c.key());
+            p.setGroup(c.group().key());
+        }));
+        return pois;
+    }
+
+    private static Category.Group toGroup(String key) {
+        for (Category.Group g : Category.Group.values()) {
+            if (g.key().equalsIgnoreCase(key)) {
+                return g;
+            }
+        }
+        return null;
     }
 }

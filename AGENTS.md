@@ -256,7 +256,7 @@ final = sum(contribution.values())
 - **저장**: PostGIS `property_score`(매물 1:1) — `transit_base`/`education_base`/`commerce_base`/`convenience_base`(가중치 미적용 그룹 base) + `computed_at`.
 - **배치**: 각 매물 좌표로 위 §5 base 산출(`LocationScoreCalculator` 재사용) → `property_score` upsert. **기동 시 자동 실행**(ApplicationRunner; `property_score` 비어 있을 때만). 정식 심야 배치(§9)는 후속.
 - **MAP-01 응답**: DETAIL 마커에 4그룹 base 포함(`property_score` LEFT JOIN, 미계산 매물은 `0`).
-- **표시 정규화(0~100)**: base 는 객관적 감쇠합산(0~)이라, **프론트 표시 단계**에서 `clamp(0, 100, Σ(group_base × persona_weight) × SCALE)` 로 변환한다. 백엔드는 base 까지만 제공해 페르소나 가중치(슬라이더, #6) 실시간 반영과 분리한다.
+- **표시 정규화(0~100)**: base 는 객관적 감쇠합산(0~)이고 **그룹별 스케일이 크게 다르므로**(교통 ~1 vs 편의 ~57, 버스 미적재·one_is_enough 영향), **프론트 표시 단계**에서 **그룹마다 다른 계수로 0~100 정규화한 뒤 페르소나 가중평균**한다: `groupScore = clamp(0,100, group_base × GROUP_SCALE[g])`, `total = Σ(groupScore × persona_weight) / Σ(persona_weight)`. (종전 단일 `SCALE` 가중평균은 편의·상업이 지배해 페르소나(교통 강조 등)가 역효과 → 폐기.) `GROUP_SCALE` 은 적재 지역 평균 기준 튜닝값(`utils/score.js`). 백엔드는 base 까지만 제공해 페르소나 가중치(슬라이더, #6) 실시간 반영과 분리한다.
 
 ## 6. AI 요약 기능
 
@@ -469,6 +469,7 @@ final = sum(contribution.values())
 | ID | Method | URI | 인증 | DB / 캐시 | 주요 제약 |
 |----|--------|-----|------|-----------|----------|
 | MAP-01 | `GET` | `/api/v1/map/markers` | Public | PostGIS / SUMMARY: `ETag`+`max-age=300`+SWR60, DETAIL: `no-store` | `bbox=minLng,minLat,maxLng,maxLat`(4326); `zoom` 1–21 서버 재판정(§7.1); 대각>150km 가드(§7.2); `size` max 200/def 100, `page` 0-based; **검색 필터(DETAIL 한정)** `dealType`·`propertyType`·`priceMin`·`priceMax` 전부 optional(§8.1.1); **DETAIL 마커에 4그룹 base 포함**(`transitBase`/`educationBase`/`commerceBase`/`convenienceBase`, 미계산 매물 `0`, §5.1) |
+| MAP-02 | `GET` | `/api/v1/map/pois` | Public | PostGIS / `no-store` | **POI 오버레이(인프라 표시 토글, DETAIL 한정)**; `bbox=minLng,minLat,maxLng,maxLat`(4326); `groups`=`transit`/`education`/`commerce`/`convenience` CSV(1개 이상); `groups`→category 변환은 `Category` enum 그룹 매핑 재사용; 응답 `[{lat,lng,category,group,name}]`; 빈 `groups`→빈 배열 |
 | LOC-01 | `POST` | `/api/v1/location/score` | Protected | PostGIS→메모리 / `no-store` | GET+Body 금지; `lon`[-180,180], `lat`[-90,90], `radiusMeters`[100,3000] def 1500, `weights`=그룹 4키(`transit`/`education`/`commerce`/`convenience`) 각[0.0,1.0] 생략=0.0; 응답 `breakdown`=`transit`/`education`/`commerce`/`convenience`(§5) |
 | PUB-01 | `GET` | `/api/v1/proxy/public-data` | Protected | PostGIS 배치 적재본 / 없음 | `type`=`REAL_ESTATE`\|`COMMERCE`; `regionCode` 10자리; `size` max 100/def 20; 전일 24:00 이전 데이터 |
 | PUB-02 | `GET` | `/api/v1/proxy/public-data/realtime` | Protected | 외부 API 직접 중계 / `no-store` | 배치 미반영 당일 단건 전용(대량 금지); `source`=`MOLIT_APT`\|`MOLIT_ROW`\|`COMMERCE`, `dealYear`, `dealMonth` 1–12, `lawd_cd` 5자리; 인증키 제거; retry 2회(1초) |
@@ -602,6 +603,9 @@ final = sum(contribution.values())
 규칙·수식·스택이 현실과 어긋나면 편법 코드 금지. 멈추고 **이 문서를 먼저 고친다.** 변경 시 사유를 PR에 남긴다.
 
 **변경 이력**
+- (2026-06-21) **표시 정규화 그룹별로 변경(§5.1)** — 실 POI 적재 후 그룹 base 스케일 불균형(교통 0.6 vs 편의 57) 확인. 종전 단일 `SCALE` 가중평균은 편의·상업이 지배해 전 매물 만점 뭉침 + 페르소나(교통 강조) 역효과 발생. **그룹별 `GROUP_SCALE` 로 0~100 정규화 후 페르소나 가중평균**으로 변경(`utils/score.js`). 강남 실데이터에서 종합점수 20~100 분포·4색 변별 정상화. 버스정류장 미적재(카카오 카테고리 미지원)는 후속. PR #12.
+- (2026-06-21) **POI/실거래가 실데이터 적재(§9) + admin 적재 엔드포인트** — 국토부 아파트 매매 OpenAPI(15126469) → 카카오 지오코딩 → PostGIS `real_estate_sales` 적재(`POST /admin/ingest/real-estate`). 카카오 카테고리 검색 → `poi` 11종 적재(`POST /admin/ingest/poi`, 버스정류장 제외). 점수 재계산(`POST /admin/recompute-scores`). 키는 `.env`(PUBLIC_DATA_SERVICE_KEY·KAKAO_REST_API_KEY). PR #12.
+- (2026-06-21) **MAP-02 POI 오버레이 엔드포인트 신설(§8.1)** — 와이어3 좌측 "인프라 표시" 토글 실제 동작. `GET /api/v1/map/pois?bbox&groups`(Public), 로컬 `poi` 테이블 조회(외부 API 아님). `groups`(transit/education/commerce/convenience)→category 변환은 기존 `Category` enum 그룹 매핑 재사용. DETAIL 줌에서만 프론트가 켜진 그룹 조회→지도에 그룹색 점. PR #12(property-search).
 - (2026-06-17) **MAP-01 가격 필터: `dealType` 미지정 시 `COALESCE(deal_amount, deposit)` 기준(§8.1.1)** — 종전 "미지정=매매가(deal_amount) 기준"은 전세·월세 매물(매매가 NULL)을 가격 범위에서 통째로 제외해 와이어3 지도검색에서 "전세 7.5억이 사라지는" 직관 위반 발생. 매매가 있으면 매매가, 없으면 보증금으로 비교하도록 변경. T-10에 검증 케이스 추가. 프론트 가격 UI는 듀얼 슬라이더→최소/최대 입력칸으로 교체(정밀·명확). PR #12(property-search).
 - (2026-06-15) **매물별 점수 사전계산 신설(§5.1)** — PostGIS `property_score`(매물 1:1, 4그룹 base) + 기동 시 배치(ApplicationRunner, `LocationScoreCalculator` 재사용). MAP-01 DETAIL 응답에 4그룹 base 포함(LEFT JOIN, 미계산 0). 0~100 정규화는 프론트 표시 단계(페르소나 가중치 실시간 반영과 분리). 정식 심야 배치(§9)·페르소나 슬라이더(#6)는 후속. PR #12(property-search).
 - (2026-06-15) **MAP-01 검색 필터 신설(§8.1.1) + 실거래가 스키마 확장** — 와이어프레임 3(지도 검색) PR A 착수. `real_estate_sales`에 `deal_type`(SALE/JEONSE/WOLSE)·`property_type`(APT/OFFICETEL/ROW_HOUSE, 원룸 제외 3종)·`deposit`·`monthly_rent`·`build_year` 추가, `deal_amount` NULL 허용(전월세). MAP-01 DETAIL에 `dealType`·`propertyType`·`priceMin`·`priceMax` 필터 추가(SUMMARY 미적용). 매물별 점수 사전계산(`property_score` 신규 테이블)은 동 PR 후속 단계. 국토부 실거래가 공공데이터 실제 필드 기준 설계(재작업 방지). PR #12(property-search).

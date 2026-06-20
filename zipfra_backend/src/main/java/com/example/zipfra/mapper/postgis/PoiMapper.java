@@ -1,6 +1,8 @@
 package com.example.zipfra.mapper.postgis;
 
 import com.example.zipfra.dto.location.PoiDistanceDTO;
+import com.example.zipfra.dto.map.Bbox;
+import com.example.zipfra.dto.map.PoiMarkerDTO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -17,4 +19,8 @@ public interface PoiMapper {
     List<PoiDistanceDTO> findWithin(@Param("lon") double lon,
                                     @Param("lat") double lat,
                                     @Param("radiusMeters") int radiusMeters);
+
+    /** MAP-02: bbox 내 + 카테고리(대문자 enum 이름) 매칭 POI 조회(오버레이용). */
+    List<PoiMarkerDTO> findInBbox(@Param("bbox") Bbox bbox,
+                                  @Param("categories") List<String> categories);
 }

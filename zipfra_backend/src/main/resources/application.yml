@@ -39,6 +39,22 @@ spring:
       maximum-pool-size: 10
       minimum-idle: 10
 
+# PUB-02 공공데이터 실시간 프록시 (§8.1) — 국토부 실거래가 OpenAPI
+public-data:
+  service-key: ${PUBLIC_DATA_SERVICE_KEY:}
+  base-url: http://apis.data.go.kr/1613000
+  # source → 엔드포인트 path 매핑(MOLIT_APT 확정, ROW/COMMERCE 는 신청 API 실제 endpoint 로 확정 필요)
+  paths:
+    MOLIT_APT: /RTMSDataSvcAptTrade/getRTMSDataSvcAptTrade
+    MOLIT_ROW: /RTMSDataSvcRHTrade/getRTMSDataSvcRHTrade
+    COMMERCE: /RTMSDataSvcNrgTrade/getRTMSDataSvcNrgTrade
+
+# 카카오 로컬 — 적재 시 지번주소 → 좌표 지오코딩(§9 실거래가 적재)
+kakao:
+  rest-api-key: ${KAKAO_REST_API_KEY:}
+  local-url: https://dapi.kakao.com/v2/local/search/address.json
+  category-url: https://dapi.kakao.com/v2/local/search/category.json
+
 # Zipfra 보안 설정 (§10)
 jwt:
   secret: ${JWT_SECRET_KEY}

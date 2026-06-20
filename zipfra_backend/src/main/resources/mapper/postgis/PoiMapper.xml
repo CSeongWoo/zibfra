@@ -23,4 +23,16 @@
               )
     </select>
 
+    <!-- MAP-02: bbox(geometry GiST) + category IN. ST_X/ST_Y 로 좌표 분리(§4). -->
+    <select id="findInBbox" resultType="com.example.zipfra.dto.map.PoiMarkerDTO">
+        SELECT category,
+               name,
+               ST_X(geom) AS lng,
+               ST_Y(geom) AS lat
+        FROM poi
+        WHERE geom &amp;&amp; ST_MakeEnvelope(#{bbox.minLng}, #{bbox.minLat}, #{bbox.maxLng}, #{bbox.maxLat}, 4326)
+          AND category IN
+          <foreach item="c" collection="categories" open="(" separator="," close=")">#{c}</foreach>
+    </select>
+
 </mapper>

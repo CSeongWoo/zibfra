@@ -29,6 +29,13 @@ export const useMapStore = defineStore('map', () => {
     markers.value = Array.isArray(next) ? next : [];
   }
 
+  // 현재 SUMMARY 시·군·구 집계 목록(MAP-01 줌아웃 응답, §7.1).
+  const regions = ref([]);
+
+  function setRegions(next) {
+    regions.value = Array.isArray(next) ? next : [];
+  }
+
   // 지도 중심 이동 명령(#7 검색·현위치). KakaoMap 이 watch 해 setCenter/setLevel(§7.4 단방향: UI→지도).
   const moveTarget = ref(null); // { lat, lng, level? }
 
@@ -43,11 +50,18 @@ export const useMapStore = defineStore('map', () => {
     zoomReq.value = { delta };
   }
 
-  // 인프라 표시 토글(와이어3 좌측). 그룹별 POI 오버레이 on/off — 실제 오버레이 렌더는 후속(PR C).
+  // 인프라 표시 토글(와이어3 좌측). 그룹별 POI 오버레이 on/off (MAP-02).
   const infraLayers = ref({ transit: true, education: true, commerce: true, convenience: true });
 
   function toggleInfra(key) {
     infraLayers.value = { ...infraLayers.value, [key]: !infraLayers.value[key] };
+  }
+
+  // MAP-02 POI 오버레이 마커(켜진 그룹의 POI). DETAIL 에서만 채움.
+  const pois = ref([]);
+
+  function setPois(next) {
+    pois.value = Array.isArray(next) ? next : [];
   }
 
   // 페르소나 그룹 가중치(#6, §5.1 표시 단계). base 사전계산값에 실시간 곱 → 마커/목록 점수 갱신.
@@ -73,7 +87,8 @@ export const useMapStore = defineStore('map', () => {
   }
 
   return {
-    bbox, zoom, strategy, filter, persona, markers, moveTarget, infraLayers, zoomReq,
-    setViewport, setStrategy, setFilter, setPersona, setMarkers, requestMove, toggleInfra, requestZoom,
+    bbox, zoom, strategy, filter, persona, markers, regions, moveTarget, infraLayers, zoomReq, pois,
+    setViewport, setStrategy, setFilter, setPersona, setMarkers, setRegions,
+    requestMove, toggleInfra, requestZoom, setPois,
   };
 });

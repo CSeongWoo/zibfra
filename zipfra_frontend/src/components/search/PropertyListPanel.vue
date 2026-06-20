@@ -33,7 +33,7 @@
         <div class="bars">
           <div class="bar" v-for="g in GROUPS" :key="g.key">
             <span class="bar-track">
-              <i :style="{ width: groupScore(m[g.key + 'Base']) + '%', background: g.color }"></i>
+              <i :style="{ width: groupScore(m[g.key + 'Base'], g.key) + '%', background: g.color }"></i>
             </span>
             <span class="bar-label">{{ g.short }}</span>
           </div>

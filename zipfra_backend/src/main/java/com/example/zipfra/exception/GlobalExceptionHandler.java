@@ -60,8 +60,11 @@ public class GlobalExceptionHandler {
         } else {
             log.warn("[{}] {}", code.name(), message);
         }
-        return ResponseEntity.status(code.getStatus())
-                .header("X-Api-Version", "1")
-                .body(ErrorResponse.of(code, message));
+        ResponseEntity.BodyBuilder builder = ResponseEntity.status(code.getStatus())
+                .header("X-Api-Version", "1");
+        if (code.getRetryAfterSeconds() != null) {
+            builder.header("Retry-After", String.valueOf(code.getRetryAfterSeconds()));
+        }
+        return builder.body(ErrorResponse.of(code, message));
     }
 }

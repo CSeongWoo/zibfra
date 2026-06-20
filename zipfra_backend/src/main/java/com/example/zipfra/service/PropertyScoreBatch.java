@@ -41,7 +41,16 @@ public class PropertyScoreBatch implements ApplicationRunner {
             log.info("[property-score] 이미 적재됨 — 배치 skip");
             return;
         }
+        recompute();
+    }
 
+    /**
+     * 전체 매물 점수 재계산(skip 없이 강제). 적재(매물·POI) 갱신 후 admin 트리거용(§5.1).
+     * upsert 라 기존 매물도 최신 POI 기준으로 갱신된다.
+     * @return 재계산한 매물 수
+     */
+    @Transactional(transactionManager = "spatialTransactionManager")
+    public int recompute() {
         List<PropertyGeom> properties = propertyScoreMapper.findAllPropertiesForScoring();
         for (PropertyGeom p : properties) {
             List<PoiDistanceDTO> pois = poiMapper.findWithin(p.getLon(), p.getLat(), RADIUS_METERS);
@@ -56,7 +65,8 @@ public class PropertyScoreBatch implements ApplicationRunner {
                     groupBase(breakdown, "commerce"),
                     groupBase(breakdown, "convenience"));
         }
-        log.info("[property-score] 배치 완료: {} 건 적재", properties.size());
+        log.info("[property-score] 재계산 완료: {} 건", properties.size());
+        return properties.size();
     }
 
     private double groupBase(Map<String, ScoreResponse.GroupResult> breakdown, String groupKey) {
