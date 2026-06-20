@@ -1,12 +1,18 @@
 package com.example.zipfra.service;
 
 import java.net.URI;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 import com.example.zipfra.config.PublicDataProperties;
 import com.example.zipfra.exception.ApiException;
 import com.example.zipfra.exception.ErrorCode;
+import com.example.zipfra.mapper.postgis.PublicDataMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
@@ -23,13 +29,59 @@ public class ProxyServiceImpl implements ProxyService {
     private static final int MAX_ATTEMPTS = 3;     // 최초 1 + retry 2 (§8.1)
     private static final long RETRY_DELAY_MS = 1000L;
     private static final int NUM_OF_ROWS = 100;
+    private static final int PUB_MAX_SIZE = 100;
+    private static final int PUB_DEF_SIZE = 20;
 
     private final RestTemplate publicDataRestTemplate;
     private final PublicDataProperties props;
+    private final PublicDataMapper publicDataMapper;
 
-    public ProxyServiceImpl(RestTemplate publicDataRestTemplate, PublicDataProperties props) {
+    public ProxyServiceImpl(RestTemplate publicDataRestTemplate,
+                            PublicDataProperties props,
+                            PublicDataMapper publicDataMapper) {
         this.publicDataRestTemplate = publicDataRestTemplate;
         this.props = props;
+        this.publicDataMapper = publicDataMapper;
+    }
+
+    @Override
+    @Transactional(transactionManager = "spatialTransactionManager", readOnly = true, propagation = Propagation.SUPPORTS)
+    public Map<String, Object> getPublicData(String type, String regionCode, Integer pageParam, Integer sizeParam) {
+        boolean realEstate = "REAL_ESTATE".equals(type);
+        if (!realEstate && !"COMMERCE".equals(type)) {
+            throw new ApiException(ErrorCode.INVALID_PARAM, "type 은 REAL_ESTATE|COMMERCE 여야 합니다: " + type);
+        }
+        if (regionCode == null || !regionCode.matches("\\d{10}")) {
+            throw new ApiException(ErrorCode.INVALID_PARAM, "regionCode 는 숫자 10자리여야 합니다: " + regionCode);
+        }
+        int size = (sizeParam != null) ? sizeParam : PUB_DEF_SIZE;
+        if (size > PUB_MAX_SIZE) {
+            throw new ApiException(ErrorCode.PAGE_SIZE_EXCEEDED, "size 는 최대 " + PUB_MAX_SIZE + " 입니다: " + size);
+        }
+        int page = (pageParam != null) ? pageParam : 0;
+        long offset = (long) page * size;
+
+        long total;
+        List<?> content;
+        if (realEstate) {
+            String lawdCd = regionCode.substring(0, 5);
+            total = publicDataMapper.countRealEstateByLawd(lawdCd);
+            content = publicDataMapper.findRealEstateByLawd(lawdCd, size, offset);
+        } else {
+            total = publicDataMapper.countCommerce();
+            content = publicDataMapper.findCommerce(size, offset);
+        }
+        boolean hasNext = (long) (page + 1) * size < total;
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("type", type);
+        result.put("regionCode", regionCode);
+        result.put("content", content);
+        result.put("page", page);
+        result.put("size", size);
+        result.put("totalCount", total);
+        result.put("hasNext", hasNext);
+        return result;
     }
 
     @Override

@@ -11,7 +11,9 @@ import java.util.List;
 
 import com.example.zipfra.dto.map.MarkerFilter;
 import com.example.zipfra.dto.map.MarkerResponse;
+import com.example.zipfra.dto.map.PoiMarkerDTO;
 import com.example.zipfra.mapper.postgis.MarkerMapper;
+import com.example.zipfra.mapper.postgis.PoiMapper;
 import com.example.zipfra.exception.ApiException;
 import com.example.zipfra.exception.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
@@ -30,8 +32,11 @@ class MapServiceImplTest {
     @Mock
     private MarkerMapper markerMapper;
 
+    @Mock
+    private PoiMapper poiMapper;
+
     private MapServiceImpl service() {
-        return new MapServiceImpl(markerMapper);
+        return new MapServiceImpl(markerMapper, poiMapper);
     }
 
     @Test
@@ -134,5 +139,28 @@ class MapServiceImplTest {
         MarkerFilter ok = new MarkerFilter("SALE", "APT", 10000, 50000);
         MarkerResponse res = service().getMarkers(SMALL_BBOX, 15, null, null, ok);
         assertThat(res.getStrategy()).isEqualTo("DETAIL");
+    }
+
+    @Test
+    @DisplayName("MAP-02: 빈 groups → 빈 결과(POI 조회 안 함)")
+    void getPois_emptyGroups() {
+        assertThat(service().getPois(SMALL_BBOX, null)).isEmpty();
+        assertThat(service().getPois(SMALL_BBOX, "")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("MAP-02: groups=transit → 해당 그룹 POI 조회 + 소문자 key·group 정규화")
+    void getPois_transit() {
+        PoiMarkerDTO p = new PoiMarkerDTO();
+        p.setCategory("SUBWAY");
+        p.setName("강남역");
+        p.setLat(37.5);
+        p.setLng(127.0);
+        when(poiMapper.findInBbox(any(), any())).thenReturn(List.of(p));
+
+        List<PoiMarkerDTO> res = service().getPois(SMALL_BBOX, "transit");
+        assertThat(res).hasSize(1);
+        assertThat(res.get(0).getGroup()).isEqualTo("transit");
+        assertThat(res.get(0).getCategory()).isEqualTo("subway");
     }
 }

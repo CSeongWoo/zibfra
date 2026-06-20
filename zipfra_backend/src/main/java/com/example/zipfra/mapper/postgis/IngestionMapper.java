@@ -1,6 +1,9 @@
 package com.example.zipfra.mapper.postgis;
 
+import java.util.List;
+
 import com.example.zipfra.dto.ingest.RealEstateRow;
+import com.example.zipfra.dto.ingest.RegionAgg;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -25,4 +28,19 @@ public interface IngestionMapper {
                   @Param("name") String name,
                   @Param("lng") double lng,
                   @Param("lat") double lat);
+
+    /** region_summary 전체 삭제(실집계 재생성). */
+    int clearRegionSummary();
+
+    /** real_estate_sales 를 시군구(lawd_cd)별 집계(SALE 기준). */
+    List<RegionAgg> aggregateRealEstateByLawd();
+
+    /** region_summary 1행 insert (geom 은 중심 좌표). */
+    int insertRegionSummary(@Param("regionCd") String regionCd,
+                            @Param("regionName") String regionName,
+                            @Param("centerLon") double centerLon,
+                            @Param("centerLat") double centerLat,
+                            @Param("dealCount") int dealCount,
+                            @Param("avgAmount") Long avgAmount,
+                            @Param("maxAmount") Long maxAmount);
 }

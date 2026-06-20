@@ -1,10 +1,21 @@
 package com.example.zipfra.service;
 
+import java.util.Map;
+
 /**
- * PUB-02 공공데이터 실시간 중계 (§8.1). 외부 국토부 실거래가 OpenAPI 를 직접 호출해 원본을 중계한다.
- * 배치 미반영 당일 단건 전용(대량 금지). 키 은닉·CORS 차단 목적.
+ * 공공데이터 프록시 (§8.1). PUB-01(적재본 조회) + PUB-02(실시간 중계). 키 은닉·CORS 차단 목적.
  */
 public interface ProxyService {
+
+    /**
+     * PUB-01 배치 적재본 조회.
+     * @param type       REAL_ESTATE | COMMERCE
+     * @param regionCode 법정동 10자리(REAL_ESTATE 는 앞 5자리=lawd_cd 로 필터)
+     * @param page       0-based(생략 0)
+     * @param size       max 100, 생략 20
+     * @return {type, regionCode, content[], page, size, totalCount, hasNext}
+     */
+    Map<String, Object> getPublicData(String type, String regionCode, Integer page, Integer size);
 
     /**
      * @param source    MOLIT_APT | MOLIT_ROW | COMMERCE (application.yml paths 키)

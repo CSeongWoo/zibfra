@@ -33,4 +33,30 @@
         VALUES (#{category}, #{name}, ST_SetSRID(ST_MakePoint(#{lng}, #{lat}), 4326))
     </insert>
 
+    <!-- region_summary 실집계(§7 줌아웃 SUMMARY) -->
+    <delete id="clearRegionSummary">
+        DELETE FROM region_summary
+    </delete>
+
+    <select id="aggregateRealEstateByLawd" resultType="com.example.zipfra.dto.ingest.RegionAgg">
+        SELECT LEFT(lawd_cd, 5)              AS lawd_cd,
+               AVG(ST_X(geom))               AS center_lon,
+               AVG(ST_Y(geom))               AS center_lat,
+               count(*)                      AS deal_count,
+               ROUND(AVG(deal_amount))::bigint AS avg_amount,
+               MAX(deal_amount)              AS max_amount
+        FROM real_estate_sales
+        WHERE deal_type = 'SALE' AND deal_amount IS NOT NULL
+        GROUP BY LEFT(lawd_cd, 5)
+    </select>
+
+    <insert id="insertRegionSummary">
+        INSERT INTO region_summary
+            (region_cd, region_name, geom, center_lon, center_lat, deal_count, avg_amount, max_amount)
+        VALUES
+            (#{regionCd}, #{regionName},
+             ST_SetSRID(ST_MakePoint(#{centerLon}, #{centerLat}), 4326),
+             #{centerLon}, #{centerLat}, #{dealCount}, #{avgAmount}, #{maxAmount})
+    </insert>
+
 </mapper>

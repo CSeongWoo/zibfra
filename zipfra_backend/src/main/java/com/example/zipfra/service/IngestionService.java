@@ -13,4 +13,19 @@ public interface IngestionService {
      * @return 적재 성공 건수(지오코딩 실패분 제외)
      */
     int ingestAptTrade(String lawdCd, String dealYmd);
+
+    /**
+     * region_summary 실집계 갱신(§7 줌아웃 SUMMARY). 적재된 real_estate_sales 를 시군구별 집계해
+     * 거래건수·평균/최고가·중심좌표를 region_summary 에 재생성한다.
+     * @return 집계된 시군구 수
+     */
+    int refreshRegionSummary();
+
+    /**
+     * 국토부 API 시군구별 집계로 region_summary 채움(§7 줌아웃 SUMMARY, 전국용).
+     * DETAIL 적재(지오코딩 대량) 없이 건수·평균/최고가만 집계, 중심좌표는 시군구명 지오코딩 1회.
+     * @param dealYmd 계약년월 YYYYMM
+     * @return 집계된 시군구 수
+     */
+    int ingestRegionSummaryFromApi(String dealYmd);
 }

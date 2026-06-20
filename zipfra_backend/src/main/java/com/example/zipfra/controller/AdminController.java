@@ -67,4 +67,25 @@ public class AdminController {
                 .header("X-Api-Version", "1")
                 .body(Map.of("recomputed", recomputed));
     }
+
+    /** region_summary 실집계 갱신(§7 줌아웃 SUMMARY). 적재 매물 기준 시군구 집계. */
+    @PostMapping("/refresh-summary")
+    public ResponseEntity<Map<String, Object>> refreshSummary() {
+        int regions = ingestionService.refreshRegionSummary();
+        return ResponseEntity.ok()
+                .header("X-Api-Version", "1")
+                .body(Map.of("regions", regions));
+    }
+
+    /** 전국(서울 25구) SUMMARY 배치(§7). 국토부 시군구 집계 — DETAIL 적재 없이 region_summary 채움. */
+    @PostMapping("/ingest/region-summary")
+    public ResponseEntity<Map<String, Object>> ingestRegionSummary(@RequestParam String dealYmd) {
+        if (!dealYmd.matches("\\d{6}")) {
+            throw new ApiException(ErrorCode.INVALID_PARAM, "dealYmd 는 YYYYMM 6자리여야 합니다: " + dealYmd);
+        }
+        int regions = ingestionService.ingestRegionSummaryFromApi(dealYmd);
+        return ResponseEntity.ok()
+                .header("X-Api-Version", "1")
+                .body(Map.of("dealYmd", dealYmd, "regions", regions));
+    }
 }

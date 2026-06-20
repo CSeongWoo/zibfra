@@ -1,5 +1,7 @@
 package com.example.zipfra.controller;
 
+import java.util.Map;
+
 import com.example.zipfra.service.ProxyService;
 import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
@@ -21,6 +23,21 @@ public class ProxyController {
 
     public ProxyController(ProxyService proxyService) {
         this.proxyService = proxyService;
+    }
+
+    /** PUB-01: 배치 적재본 조회(Protected). type=REAL_ESTATE|COMMERCE. */
+    @GetMapping("/public-data")
+    public ResponseEntity<Map<String, Object>> publicData(
+            @RequestParam String type,
+            @RequestParam String regionCode,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
+
+        Map<String, Object> body = proxyService.getPublicData(type, regionCode, page, size);
+        return ResponseEntity.ok()
+                .header("X-Api-Version", "1")
+                .cacheControl(CacheControl.noStore())
+                .body(body);
     }
 
     @GetMapping("/public-data/realtime")

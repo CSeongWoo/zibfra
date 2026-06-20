@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.zipfra.mapper.postgis.PublicDataMapper">
+
+    <!-- PUB-01 적재본 조회(§8.1). 좌표는 ST_X/ST_Y 분리(§4). -->
+
+    <select id="countRealEstateByLawd" resultType="long">
+        SELECT count(*) FROM real_estate_sales WHERE lawd_cd = #{lawdCd}
+    </select>
+
+    <select id="findRealEstateByLawd" resultType="com.example.zipfra.dto.map.MarkerDTO">
+        SELECT id,
+               ST_Y(geom) AS lat,
+               ST_X(geom) AS lng,
+               building_name,
+               deal_type,
+               property_type,
+               deal_amount,
+               deposit,
+               monthly_rent,
+               exclusive_area,
+               floor_no,
+               build_year
+        FROM real_estate_sales
+        WHERE lawd_cd = #{lawdCd}
+        ORDER BY id
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+
+    <select id="countCommerce" resultType="long">
+        SELECT count(*) FROM poi WHERE category IN ('RESTAURANT', 'CAFE', 'CINEMA', 'MART')
+    </select>
+
+    <select id="findCommerce" resultType="com.example.zipfra.dto.map.PoiMarkerDTO">
+        SELECT category,
+               name,
+               ST_X(geom) AS lng,
+               ST_Y(geom) AS lat
+        FROM poi
+        WHERE category IN ('RESTAURANT', 'CAFE', 'CINEMA', 'MART')
+        ORDER BY id
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+
+</mapper>
