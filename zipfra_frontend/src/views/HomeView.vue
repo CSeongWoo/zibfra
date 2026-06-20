@@ -1,61 +1,23 @@
 <template>
   <main class="workspace animate-fade-in">
-    <MapContainer @viewport-change="onViewport" @marker-click="onMarkerClick" @map-click="onMapClick" />
+    <MapContainer @marker-click="onMarkerClick" />
 
-    <div class="map-overlay glass-panel">
-      <h3>실시간 뷰포트 (§7 · §8)</h3>
-      <dl>
-        <dt>bbox</dt>
-        <dd>{{ mapStore.bbox ?? '–' }}</dd>
-        <dt>zoom(level)</dt>
-        <dd>{{ mapStore.zoom ?? '–' }}</dd>
-        <dt>last propertyId</dt>
-        <dd>{{ lastPropertyId ?? '–' }}</dd>
-      </dl>
-      <p class="hint">지도를 움직이면 bbox가 갱신됩니다. 마커는 Phase 2(MAP-01)에서 주입됩니다.</p>
+    <!-- 와이어3 좌측 통합 사이드바: 필터 + 인프라 토글 + 페르소나 -->
+    <FilterSidebar />
 
-      <!-- LOC-01: 지도 클릭 지점 입지 점수 (가중치 전부 1.0 고정) -->
-      <hr />
-      <h3>입지 점수 (LOC-01)</h3>
-      <p v-if="!score && !scoreError" class="hint">지도를 클릭하면 그 지점의 입지 점수를 계산합니다.</p>
-      <p v-if="scoreLoading" class="hint">계산 중…</p>
-      <p v-if="scoreError" class="hint" style="color: var(--color-danger, #ef4444);">{{ scoreError }}</p>
+    <!-- 와이어3 우측: 매물 목록(점수배지 + 4미니바). 카드 클릭 = 마커 클릭과 동일 -->
+    <PropertyListPanel @select="onMarkerClick" />
 
-      <template v-if="score">
-        <dl>
-          <dt>좌표</dt>
-          <dd>{{ score.lon.toFixed(5) }}, {{ score.lat.toFixed(5) }}</dd>
-          <dt>반경</dt>
-          <dd>{{ score.radiusMeters }}m</dd>
-          <dt>finalScore</dt>
-          <dd><strong>{{ score.finalScore }}</strong></dd>
-        </dl>
-        <dl>
-          <template v-for="(grp, key) in score.breakdown" :key="key">
-            <dt>{{ key }}</dt>
-            <dd>{{ grp.score }} <span style="color: var(--text-tertiary);">(가중치 {{ grp.weight }})</span></dd>
-            <template v-for="(cat, cname) in grp.categories" :key="cname">
-              <dt style="padding-left: 12px; color: var(--text-tertiary);">· {{ cname }}</dt>
-              <dd>base {{ cat.base }} <span style="color: var(--text-tertiary);">({{ cat.count }}개)</span></dd>
-            </template>
-          </template>
-        </dl>
-      </template>
-    </div>
+    <!-- 와이어3 지도 컨트롤: 범례(좌하단) · 현위치(하단중앙) · 줌(우하단) -->
+    <MapLegend />
+    <LocateButton />
+    <ZoomButtons />
 
-    <!-- Phase 2 Demo Actions -->
-    <div class="demo-actions glass-panel" v-if="lastPropertyId">
-      <h4>선택된 매물 (ID: {{ lastPropertyId }})</h4>
-      <div class="actions-row">
-        <FavoriteButton :propertyId="lastPropertyId" />
-        <button class="review-btn" @click="isReviewModalOpen = true">리뷰 보기</button>
-      </div>
-    </div>
-
-    <ReviewModal 
+    <!-- 매물 선택 시 리뷰 모달 직결(Dev B 컴포넌트, §7.4 단방향) -->
+    <ReviewModal
       :isOpen="isReviewModalOpen"
       targetType="BUILDING"
-      :targetId="String(lastPropertyId)"
+      :targetId="String(selectedPropertyId)"
       @close="isReviewModalOpen = false"
     />
   </main>
@@ -64,49 +26,20 @@
 <script setup>
 import { ref } from 'vue';
 import MapContainer from '@/components/map/MapContainer.vue';
-import KakaoMap from '@/components/map/KakaoMap.vue';
-import FavoriteButton from '@/components/favorite/FavoriteButton.vue';
+import FilterSidebar from '@/components/search/FilterSidebar.vue';
+import PropertyListPanel from '@/components/search/PropertyListPanel.vue';
+import MapLegend from '@/components/search/MapLegend.vue';
+import LocateButton from '@/components/search/LocateButton.vue';
+import ZoomButtons from '@/components/search/ZoomButtons.vue';
 import ReviewModal from '@/components/review/ReviewModal.vue';
-import { useMapStore } from '@/stores/map';
-import { fetchLocationScore } from '@/api/location';
 
-const mapStore = useMapStore();
-const lastPropertyId = ref(null);
+const selectedPropertyId = ref(null);
 const isReviewModalOpen = ref(false);
 
-// LOC-01 데모: 가중치는 그룹 단위 4개(§5 재편), 전부 1.0 고정(점수가 보이도록).
-const DEMO_WEIGHTS = {
-  transit: 1, education: 1, commerce: 1, convenience: 1,
-};
-
-const score = ref(null);
-const scoreError = ref(null);
-const scoreLoading = ref(false);
-
-async function onMapClick({ lat, lng }) {
-  scoreLoading.value = true;
-  scoreError.value = null;
-  try {
-    score.value = await fetchLocationScore({ lon: lng, lat, weights: DEMO_WEIGHTS });
-  } catch (e) {
-    score.value = null;
-    scoreError.value = e.status === 401
-      ? '로그인이 필요합니다 (Protected).'
-      : `${e.error ?? '오류'}: ${e.message ?? ''}`;
-  } finally {
-    scoreLoading.value = false;
-  }
-}
-
-function onViewport({ bbox, level }) {
-  // mapStore는 KakaoMap 내부에서 이미 갱신함. 여기선 데모용 로그.
-  console.log('[viewport-change]', bbox, 'level', level);
-}
-
-// §7.4: 지도는 propertyId만 발신. 모달 등 상세는 부모/Dev B(Phase 2)가 처리.
+// §7.4: 지도/목록은 propertyId만 발신. 여기서 모달을 연다(상세 페이지는 후속 PR B).
 function onMarkerClick(propertyId) {
-  lastPropertyId.value = propertyId;
-  console.log('[marker-click] propertyId =', propertyId);
+  selectedPropertyId.value = propertyId;
+  isReviewModalOpen.value = true;
 }
 </script>
 
@@ -116,86 +49,6 @@ function onMarkerClick(propertyId) {
   position: relative;
   height: calc(100vh - 64px);
   width: 100%;
-}
-
-.map-overlay {
-  position: absolute;
-  top: 16px;
-  left: 16px;
-  z-index: 5;
-  max-width: 340px;
-  padding: 16px 18px;
-  border-radius: var(--radius-md);
-  font-size: 12px;
-}
-
-.map-overlay h3 {
-  font-size: 12px;
-  color: var(--accent-color);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 10px;
-}
-
-.map-overlay dl {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 4px 12px;
-}
-
-.map-overlay dt {
-  color: var(--text-secondary);
-}
-
-.map-overlay dd {
-  color: var(--text-primary);
-  font-family: monospace;
-  word-break: break-all;
-}
-
-.map-overlay .hint {
-  margin-top: 10px;
-  color: var(--text-tertiary);
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-.demo-actions {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  z-index: 5;
-  padding: 16px;
-  border-radius: var(--radius-md);
-  min-width: 250px;
-}
-
-.demo-actions h4 {
-  font-size: 13px;
-  color: var(--text-primary);
-  margin-bottom: 12px;
-}
-
-.actions-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.review-btn {
-  padding: 8px 16px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  color: var(--text-primary);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
-  transition: all 0.2s;
-}
-
-.review-btn:hover {
-  background: var(--bg-secondary);
-  border-color: var(--accent-color);
+  overflow: hidden;
 }
 </style>

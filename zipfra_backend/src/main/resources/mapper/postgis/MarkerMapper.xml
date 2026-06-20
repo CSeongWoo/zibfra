@@ -10,25 +10,65 @@
       - map-underscore-to-camel-case=true (SpatialDataSourceConfig) → snake 컬럼 자동 매핑.
     -->
 
-    <!-- DETAIL: bbox 내 매물 총 개수 -->
+    <!--
+      bbox + 검색 필터(§8.1.1) 공통 WHERE 조각.
+      가격 필터 대상 컬럼은 dealType 별 분기: JEONSE/WOLSE→deposit, SALE→deal_amount,
+      미지정(전체)→COALESCE(deal_amount, deposit)(매매가 있으면 매매가, 없으면 보증금) — 전월세가 통째 제외되지 않도록.
+      filter 의 각 필드는 null 이면 조건 생략(동적).
+    -->
+    <sql id="bboxAndFilter">
+        WHERE geom &amp;&amp; ST_MakeEnvelope(#{bbox.minLng}, #{bbox.minLat}, #{bbox.maxLng}, #{bbox.maxLat}, 4326)
+        <if test="filter != null">
+            <if test="filter.dealType != null">AND deal_type = #{filter.dealType}</if>
+            <if test="filter.propertyType != null">AND property_type = #{filter.propertyType}</if>
+            <if test="filter.priceMin != null or filter.priceMax != null">
+                <choose>
+                    <when test="filter.dealType == 'JEONSE' or filter.dealType == 'WOLSE'">
+                        <if test="filter.priceMin != null">AND deposit &gt;= #{filter.priceMin}</if>
+                        <if test="filter.priceMax != null">AND deposit &lt;= #{filter.priceMax}</if>
+                    </when>
+                    <when test="filter.dealType == 'SALE'">
+                        <if test="filter.priceMin != null">AND deal_amount &gt;= #{filter.priceMin}</if>
+                        <if test="filter.priceMax != null">AND deal_amount &lt;= #{filter.priceMax}</if>
+                    </when>
+                    <otherwise>
+                        <if test="filter.priceMin != null">AND COALESCE(deal_amount, deposit) &gt;= #{filter.priceMin}</if>
+                        <if test="filter.priceMax != null">AND COALESCE(deal_amount, deposit) &lt;= #{filter.priceMax}</if>
+                    </otherwise>
+                </choose>
+            </if>
+        </if>
+    </sql>
+
+    <!-- DETAIL: bbox + 필터 매칭 매물 총 개수 -->
     <select id="countMarkers" resultType="long">
         SELECT count(*)
         FROM real_estate_sales
-        WHERE geom &amp;&amp; ST_MakeEnvelope(#{bbox.minLng}, #{bbox.minLat}, #{bbox.maxLng}, #{bbox.maxLat}, 4326)
+        <include refid="bboxAndFilter"/>
     </select>
 
-    <!-- DETAIL: bbox 내 매물 마커 페이지 -->
+    <!-- DETAIL: bbox + 필터 매칭 매물 마커 페이지 (+ 매물별 점수 base §5.1) -->
     <select id="findMarkers" resultType="com.example.zipfra.dto.map.MarkerDTO">
-        SELECT id,
-               ST_Y(geom)      AS lat,
-               ST_X(geom)      AS lng,
+        SELECT real_estate_sales.id,
+               ST_Y(real_estate_sales.geom)      AS lat,
+               ST_X(real_estate_sales.geom)      AS lng,
                building_name,
+               deal_type,
+               property_type,
                deal_amount,
+               deposit,
+               monthly_rent,
                exclusive_area,
-               floor_no
+               floor_no,
+               build_year,
+               COALESCE(ps.transit_base, 0)     AS transit_base,
+               COALESCE(ps.education_base, 0)   AS education_base,
+               COALESCE(ps.commerce_base, 0)    AS commerce_base,
+               COALESCE(ps.convenience_base, 0) AS convenience_base
         FROM real_estate_sales
-        WHERE geom &amp;&amp; ST_MakeEnvelope(#{bbox.minLng}, #{bbox.minLat}, #{bbox.maxLng}, #{bbox.maxLat}, 4326)
-        ORDER BY id
+        LEFT JOIN property_score ps ON ps.property_id = real_estate_sales.id
+        <include refid="bboxAndFilter"/>
+        ORDER BY real_estate_sales.id
         LIMIT #{size} OFFSET #{offset}
     </select>
 

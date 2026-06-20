@@ -3,8 +3,11 @@ package com.example.zipfra.service;
 import java.util.List;
 
 import com.example.zipfra.dto.map.Bbox;
+import com.example.zipfra.dto.map.DealType;
 import com.example.zipfra.dto.map.MarkerDTO;
+import com.example.zipfra.dto.map.MarkerFilter;
 import com.example.zipfra.dto.map.MarkerResponse;
+import com.example.zipfra.dto.map.PropertyType;
 import com.example.zipfra.dto.map.RegionSummaryDTO;
 import com.example.zipfra.mapper.postgis.MarkerMapper;
 import com.example.zipfra.util.BboxValidator;
@@ -37,7 +40,7 @@ public class MapServiceImpl implements MapService {
 
     @Override
     @Transactional(transactionManager = "spatialTransactionManager", readOnly = true, propagation = Propagation.SUPPORTS)
-    public MarkerResponse getMarkers(String bboxRaw, int zoom, Integer page, Integer size) {
+    public MarkerResponse getMarkers(String bboxRaw, int zoom, Integer page, Integer size, MarkerFilter filter) {
         if (zoom < ZOOM_MIN || zoom > ZOOM_MAX) {
             throw new ApiException(ErrorCode.ZOOM_OUT_OF_RANGE,
                     "zoom 은 " + ZOOM_MIN + "~" + ZOOM_MAX + " 범위여야 합니다: " + zoom);
@@ -46,6 +49,7 @@ public class MapServiceImpl implements MapService {
             throw new ApiException(ErrorCode.PAGE_SIZE_EXCEEDED,
                     "size 는 최대 " + MAX_PAGE_SIZE + " 입니다: " + size);
         }
+        validateFilter(filter);
 
         Bbox bbox = BboxValidator.parse(bboxRaw);
         boolean detail = zoom >= ZOOM_THRESHOLD_IN;
@@ -56,17 +60,38 @@ public class MapServiceImpl implements MapService {
                 throw new ApiException(ErrorCode.BBOX_TOO_LARGE_FOR_DETAIL,
                         "상세 조회 bbox 대각이 150km 를 초과했습니다.");
             }
-            return detail(bbox, page, size);
+            return detail(bbox, page, size, filter);
         }
-        return summary(bbox, oversized);
+        return summary(bbox, oversized);   // SUMMARY 는 필터 무시(§8.1.1)
     }
 
-    private MarkerResponse detail(Bbox bbox, Integer pageParam, Integer sizeParam) {
+    /** 검색 필터의 거래/매물 유형 값이 enum 에 속하는지 검증(§8.1.1). 불량 시 INVALID_PARAM. */
+    private void validateFilter(MarkerFilter filter) {
+        if (filter == null) {
+            return;
+        }
+        if (filter.getDealType() != null) {
+            requireEnum(filter.getDealType(), DealType.class, "dealType");
+        }
+        if (filter.getPropertyType() != null) {
+            requireEnum(filter.getPropertyType(), PropertyType.class, "propertyType");
+        }
+    }
+
+    private <E extends Enum<E>> void requireEnum(String value, Class<E> type, String field) {
+        try {
+            Enum.valueOf(type, value);
+        } catch (IllegalArgumentException e) {
+            throw new ApiException(ErrorCode.INVALID_PARAM, field + " 값이 유효하지 않습니다: " + value);
+        }
+    }
+
+    private MarkerResponse detail(Bbox bbox, Integer pageParam, Integer sizeParam, MarkerFilter filter) {
         int page = (pageParam != null) ? pageParam : DEFAULT_PAGE;
         int size = (sizeParam != null) ? sizeParam : DEFAULT_SIZE;
 
-        long totalCount = markerMapper.countMarkers(bbox);
-        List<MarkerDTO> markers = markerMapper.findMarkers(bbox, size, (long) page * size);
+        long totalCount = markerMapper.countMarkers(bbox, filter);
+        List<MarkerDTO> markers = markerMapper.findMarkers(bbox, filter, size, (long) page * size);
         boolean hasNext = (long) (page + 1) * size < totalCount;
 
         return MarkerResponse.detail(markers, page, size, totalCount, hasNext);

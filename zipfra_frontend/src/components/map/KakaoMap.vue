@@ -6,6 +6,7 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { useMapStore } from '@/stores/map';
 import { kakaoBoundsToBbox } from '@/utils/bbox';
+import { totalScore, scoreColor } from '@/utils/score';
 
 // 초기 중심/줌(기본: 강남 삼성동 — 실거래 데이터 밀집 지역). 마커 데이터(MAP-01)는 `markers`로 주입.
 const props = defineProps({
@@ -39,13 +40,33 @@ function renderMarkers() {
   markerObjects.forEach((m) => m.setMap(null));
   markerObjects.length = 0;
   props.markers.forEach((item) => {
-    const marker = new kakao.maps.Marker({
-      position: new kakao.maps.LatLng(item.lat, item.lng),
-      map,
-    });
+    // §5.1: 매물 종합 점수(base×페르소나 가중치 정규화)를 핀 마커로 표시(#6 실시간 반영).
+    const score = totalScore(item, mapStore.persona);
+    const color = scoreColor(score);
+    const pin = document.createElement('div');
+    pin.style.cssText = 'position:relative;width:36px;height:36px;cursor:pointer;';
+    const circle = document.createElement('div');
+    circle.textContent = score;
+    circle.style.cssText =
+      `width:36px;height:36px;border-radius:50%;background:${color};color:#fff;`
+      + 'display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;'
+      + 'border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.4);';
+    const tail = document.createElement('div');
+    tail.style.cssText =
+      `position:absolute;left:50%;bottom:-6px;transform:translateX(-50%);width:0;height:0;`
+      + `border-left:5px solid transparent;border-right:5px solid transparent;border-top:8px solid ${color};`;
+    pin.appendChild(circle);
+    pin.appendChild(tail);
     // §7.4: 모달 등 상세 구현 금지 — propertyId만 발신.
-    kakao.maps.event.addListener(marker, 'click', () => emit('marker-click', item.id));
-    markerObjects.push(marker);
+    pin.addEventListener('click', () => emit('marker-click', item.id));
+    const overlay = new kakao.maps.CustomOverlay({
+      position: new kakao.maps.LatLng(item.lat, item.lng),
+      content: pin,
+      yAnchor: 1.0, // 핀 꼬리 끝이 좌표에 닿도록
+      clickable: true,
+    });
+    overlay.setMap(map);
+    markerObjects.push(overlay);
   });
 }
 
@@ -68,6 +89,20 @@ function initMap() {
 }
 
 watch(() => props.markers, renderMarkers, { deep: true });
+// #6: 페르소나 가중치 변경 시 배지 점수·색상 실시간 갱신.
+watch(() => mapStore.persona, renderMarkers, { deep: true });
+// #7: 검색·현위치 이동 명령 → 지도 중심/레벨 변경(이후 idle 이벤트가 markers 재조회).
+watch(() => mapStore.moveTarget, (t) => {
+  if (!map || !t) return;
+  const { kakao } = window;
+  map.setCenter(new kakao.maps.LatLng(t.lat, t.lng));
+  if (t.level != null) map.setLevel(t.level);
+});
+// #7: 줌 +/- 버튼 → 레벨 변경(delta +1=줌인이므로 level 감소).
+watch(() => mapStore.zoomReq, (z) => {
+  if (!map || !z) return;
+  map.setLevel(map.getLevel() - z.delta);
+});
 
 onMounted(() => {
   const { kakao } = window;

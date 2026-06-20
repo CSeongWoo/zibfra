@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.zipfra.mapper.postgis.PropertyScoreMapper">
+
+    <select id="count" resultType="long">
+        SELECT count(*) FROM property_score
+    </select>
+
+    <!-- 배치 입력: 좌표는 PGobject 직접 매핑 금지 → ST_X/ST_Y 로 double 분리(§4) -->
+    <select id="findAllPropertiesForScoring" resultType="com.example.zipfra.dto.score.PropertyGeom">
+        SELECT id,
+               ST_X(geom) AS lon,
+               ST_Y(geom) AS lat
+        FROM real_estate_sales
+    </select>
+
+    <insert id="upsert">
+        INSERT INTO property_score
+            (property_id, transit_base, education_base, commerce_base, convenience_base, computed_at)
+        VALUES
+            (#{propertyId}, #{transitBase}, #{educationBase}, #{commerceBase}, #{convenienceBase}, now())
+        ON CONFLICT (property_id) DO UPDATE SET
+            transit_base     = EXCLUDED.transit_base,
+            education_base   = EXCLUDED.education_base,
+            commerce_base    = EXCLUDED.commerce_base,
+            convenience_base = EXCLUDED.convenience_base,
+            computed_at      = now()
+    </insert>
+
+</mapper>

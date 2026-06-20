@@ -20,7 +20,17 @@ public class MarkerDTO {
     private double lat;
     private double lng;
     private String buildingName;
-    private Long dealAmount;       // 거래금액(만원)
+    private String dealType;       // SALE | JEONSE | WOLSE
+    private String propertyType;   // APT | OFFICETEL | ROW_HOUSE
+    private Long dealAmount;       // 매매가(만원), 전월세는 null
+    private Long deposit;          // 보증금(만원), 전월세
+    private Integer monthlyRent;   // 월세(만원), 월세만
     private Double exclusiveArea;  // 전용면적(㎡)
     private Integer floorNo;
+    private Integer buildYear;     // 건축년도
+    // 매물별 점수 4그룹 base (§5.1, property_score LEFT JOIN; 미계산 매물 0). 가중치 미적용.
+    private Double transitBase;
+    private Double educationBase;
+    private Double commerceBase;
+    private Double convenienceBase;
 }

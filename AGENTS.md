@@ -249,6 +249,15 @@ for group in [transit, education, commerce, convenience]:
 final = sum(contribution.values())
 ```
 
+### 5.1 매물별 점수 사전계산 (MAP-01 연계, PR A)
+
+매물 마커/목록에 점수를 띄우려면 매물마다 점수가 미리 있어야 한다. **무거운 부분(POI 반경쿼리·감쇠합산)은 배치로 미리 계산·저장**하고, **가벼운 곱셈(그룹 base × 페르소나 가중치)은 실시간**으로 처리한다(LOC-01 좌표 클릭 계산과 별개).
+
+- **저장**: PostGIS `property_score`(매물 1:1) — `transit_base`/`education_base`/`commerce_base`/`convenience_base`(가중치 미적용 그룹 base) + `computed_at`.
+- **배치**: 각 매물 좌표로 위 §5 base 산출(`LocationScoreCalculator` 재사용) → `property_score` upsert. **기동 시 자동 실행**(ApplicationRunner; `property_score` 비어 있을 때만). 정식 심야 배치(§9)는 후속.
+- **MAP-01 응답**: DETAIL 마커에 4그룹 base 포함(`property_score` LEFT JOIN, 미계산 매물은 `0`).
+- **표시 정규화(0~100)**: base 는 객관적 감쇠합산(0~)이라, **프론트 표시 단계**에서 `clamp(0, 100, Σ(group_base × persona_weight) × SCALE)` 로 변환한다. 백엔드는 base 까지만 제공해 페르소나 가중치(슬라이더, #6) 실시간 반영과 분리한다.
+
 ## 6. AI 요약 기능
 
 ### 6.1 기능 목록
@@ -459,10 +468,23 @@ final = sum(contribution.values())
 
 | ID | Method | URI | 인증 | DB / 캐시 | 주요 제약 |
 |----|--------|-----|------|-----------|----------|
-| MAP-01 | `GET` | `/api/v1/map/markers` | Public | PostGIS / SUMMARY: `ETag`+`max-age=300`+SWR60, DETAIL: `no-store` | `bbox=minLng,minLat,maxLng,maxLat`(4326); `zoom` 1–21 서버 재판정(§7.1); 대각>150km 가드(§7.2); `size` max 200/def 100, `page` 0-based |
+| MAP-01 | `GET` | `/api/v1/map/markers` | Public | PostGIS / SUMMARY: `ETag`+`max-age=300`+SWR60, DETAIL: `no-store` | `bbox=minLng,minLat,maxLng,maxLat`(4326); `zoom` 1–21 서버 재판정(§7.1); 대각>150km 가드(§7.2); `size` max 200/def 100, `page` 0-based; **검색 필터(DETAIL 한정)** `dealType`·`propertyType`·`priceMin`·`priceMax` 전부 optional(§8.1.1); **DETAIL 마커에 4그룹 base 포함**(`transitBase`/`educationBase`/`commerceBase`/`convenienceBase`, 미계산 매물 `0`, §5.1) |
 | LOC-01 | `POST` | `/api/v1/location/score` | Protected | PostGIS→메모리 / `no-store` | GET+Body 금지; `lon`[-180,180], `lat`[-90,90], `radiusMeters`[100,3000] def 1500, `weights`=그룹 4키(`transit`/`education`/`commerce`/`convenience`) 각[0.0,1.0] 생략=0.0; 응답 `breakdown`=`transit`/`education`/`commerce`/`convenience`(§5) |
 | PUB-01 | `GET` | `/api/v1/proxy/public-data` | Protected | PostGIS 배치 적재본 / 없음 | `type`=`REAL_ESTATE`\|`COMMERCE`; `regionCode` 10자리; `size` max 100/def 20; 전일 24:00 이전 데이터 |
 | PUB-02 | `GET` | `/api/v1/proxy/public-data/realtime` | Protected | 외부 API 직접 중계 / `no-store` | 배치 미반영 당일 단건 전용(대량 금지); `source`=`MOLIT_APT`\|`MOLIT_ROW`\|`COMMERCE`, `dealYear`, `dealMonth` 1–12, `lawd_cd` 5자리; 인증키 제거; retry 2회(1초) |
+
+#### 8.1.1 MAP-01 검색 필터 (PR A 신설 · DETAIL 한정)
+
+> 줌인(DETAIL, 개별 매물 마커)에만 적용한다. SUMMARY(줌아웃 시·군·구 집계)는 필터를 무시한다(집계 단위라 매물 속성 필터 의미 없음). 모든 필터는 optional·AND 결합, MyBatis 동적 WHERE(`<if>`)로 생략 가능. 필터 부적합 값은 `400 INVALID_PARAM`.
+
+| 파라미터 | 값 | 비고 |
+|----------|-----|------|
+| `dealType` | `SALE`\|`JEONSE`\|`WOLSE` | 거래유형(매매/전세/월세). 생략 시 전체 |
+| `propertyType` | `APT`\|`OFFICETEL`\|`ROW_HOUSE` | 매물유형(아파트/오피스텔/빌라 **3종**, 원룸 제외). 생략 시 전체 |
+| `priceMin` / `priceMax` | 정수(만원) | 가격 범위. 대상 컬럼은 `dealType`별 분기 ↓ |
+
+- **가격 필터 대상 컬럼**: `SALE`→`deal_amount`(매매가), `JEONSE`→`deposit`(보증금), `WOLSE`→`deposit`(보증금 기준; 월세 `monthly_rent`는 별도 표시만). **`dealType` 미지정 + 가격 지정** 시 `COALESCE(deal_amount, deposit)` 기준(매매가 있으면 매매가, 없으면 보증금)으로 적용 — 전월세 매물이 매매가 NULL 때문에 통째로 제외되지 않도록 한다.
+- **테스트 기준(T-10)**: `dealType=SALE`→전월세 행 제외 ✅ / `propertyType=APT`→오피스텔·빌라 제외 ✅ / `priceMin=10000&priceMax=50000`(매매)→경계 포함 ✅ / `dealType=INVALID`→`400 INVALID_PARAM` / 필터 전부 생략→기존 bbox 전체 조회(회귀) ✅ / **`dealType` 미지정 + `priceMax=80000`→전세 보증금 7.5억(deposit) 매물 포함**(COALESCE) ✅.
 
 ### 8.2 AI·인증·유저 API (Dev B 전담)
 
@@ -580,6 +602,9 @@ final = sum(contribution.values())
 규칙·수식·스택이 현실과 어긋나면 편법 코드 금지. 멈추고 **이 문서를 먼저 고친다.** 변경 시 사유를 PR에 남긴다.
 
 **변경 이력**
+- (2026-06-17) **MAP-01 가격 필터: `dealType` 미지정 시 `COALESCE(deal_amount, deposit)` 기준(§8.1.1)** — 종전 "미지정=매매가(deal_amount) 기준"은 전세·월세 매물(매매가 NULL)을 가격 범위에서 통째로 제외해 와이어3 지도검색에서 "전세 7.5억이 사라지는" 직관 위반 발생. 매매가 있으면 매매가, 없으면 보증금으로 비교하도록 변경. T-10에 검증 케이스 추가. 프론트 가격 UI는 듀얼 슬라이더→최소/최대 입력칸으로 교체(정밀·명확). PR #12(property-search).
+- (2026-06-15) **매물별 점수 사전계산 신설(§5.1)** — PostGIS `property_score`(매물 1:1, 4그룹 base) + 기동 시 배치(ApplicationRunner, `LocationScoreCalculator` 재사용). MAP-01 DETAIL 응답에 4그룹 base 포함(LEFT JOIN, 미계산 0). 0~100 정규화는 프론트 표시 단계(페르소나 가중치 실시간 반영과 분리). 정식 심야 배치(§9)·페르소나 슬라이더(#6)는 후속. PR #12(property-search).
+- (2026-06-15) **MAP-01 검색 필터 신설(§8.1.1) + 실거래가 스키마 확장** — 와이어프레임 3(지도 검색) PR A 착수. `real_estate_sales`에 `deal_type`(SALE/JEONSE/WOLSE)·`property_type`(APT/OFFICETEL/ROW_HOUSE, 원룸 제외 3종)·`deposit`·`monthly_rent`·`build_year` 추가, `deal_amount` NULL 허용(전월세). MAP-01 DETAIL에 `dealType`·`propertyType`·`priceMin`·`priceMax` 필터 추가(SUMMARY 미적용). 매물별 점수 사전계산(`property_score` 신규 테이블)은 동 PR 후속 단계. 국토부 실거래가 공공데이터 실제 필드 기준 설계(재작업 방지). PR #12(property-search).
 - (2026-06-13) **입지 점수(§5) 카테고리 전면 재편** — 와이어프레임 4분류(교통/학교·학원/상업/편의)로 갈아엎음. 기존 ESSENTIAL/LEISURE/ENV_PENALTY 폐기, ENV 감점·서울 한정(`isInSeoul`·`seoul_boundary`) 로직 제거. 응답 `breakdown` 키 = `transit`/`education`/`commerce`/`convenience`, **가중치는 그룹 단위 4개**로 변경. 거리 감쇠 W공식·모델(one_is_enough/more_is_better)은 유지. 신규 POI(`school`·`academy`·`hospital`·`convenience_store`·`mart`) 적재는 별도 티켓(§9, 적재 전 `count:0`). 와이어프레임/페르소나 UI 정합 목적. PR #12.
 - (2026-06-11) 입지 점수(§5)에 TRANSIT 그룹 신설 — `subway`(지하철역, one_is_enough)·`bus_stop`(버스정류장, more_is_better), 전국 적용. 응답 `breakdown`에 `transit` 키 추가(§5). 교통 POI 데이터 적재는 미완료(틀만 선반영, 적재 전 `count:0`). PR #6 리뷰(CSeongWoo) 반영.
 - (2026-06-08) 프론트엔드 최초 랜딩 시 불필요한 토큰 재발급(refresh) 호출 제거 및 보호 구역(requiresAuth) 기반 세션 복구/리다이렉션 무한 루프 방지 로직 구현.

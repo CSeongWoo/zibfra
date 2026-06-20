@@ -2,19 +2,23 @@
   <div class="app-container animate-fade-in">
     <!-- Header -->
     <header class="app-header glass-panel">
-      <router-link to="/" class="logo" style="text-decoration: none; color: inherit; cursor: pointer;">
-        <span class="logo-icon">🏙️</span>
-        <h1>Zipfra</h1>
-        <span class="badge badge-info">Map Base</span>
+      <router-link to="/" class="logo">
+        <span class="logo-icon">🏠</span>
+        <h1>SSAFY <span class="logo-accent">HOME</span></h1>
       </router-link>
 
+      <SearchBar v-if="showMapUI" class="header-search" />
+
+      <nav v-if="showMapUI" class="tabs">
+        <router-link to="/" class="tab" exact-active-class="active">지도검색</router-link>
+        <span class="tab disabled" @click="alert('준비 중입니다')">내 정보</span>
+      </nav>
+
+      <div class="header-spacer"></div>
+
       <div class="header-actions">
-        <div class="status-indicator">
-          <span class="pulse-dot"></span>
-          <span class="status-text">
-            Zoom <strong>{{ mapStore.zoom ?? '–' }}</strong> · {{ mapStore.strategy ?? 'IDLE' }}
-          </span>
-        </div>
+        <button class="icon-btn" title="알림">🔔</button>
+        <button class="icon-btn" title="설정">⚙️</button>
 
         <div class="auth-section">
           <template v-if="authStore.isAuthenticated">
@@ -40,14 +44,17 @@
 </template>
 
 <script setup>
-import { useRouter } from 'vue-router';
-import { ref } from 'vue';
-import { useMapStore } from '@/stores/map';
+import { useRouter, useRoute } from 'vue-router';
+import { computed } from 'vue';
 import { useAuthStore } from '@/stores/auth';
+import SearchBar from '@/components/search/SearchBar.vue';
 
-const mapStore = useMapStore();
 const authStore = useAuthStore();
 const router = useRouter();
+const route = useRoute();
+
+// 검색바·탭은 지도 화면(홈)에서만. 로그인 등 독립 페이지에선 숨김.
+const showMapUI = computed(() => route.name === 'home');
 
 function goToLogin() {
   router.push('/login');
@@ -75,8 +82,8 @@ async function handleLogout() {
 .app-header {
   height: 64px;
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 18px;
   padding: 0 24px;
   border-bottom: 1px solid var(--border-color);
   z-index: 10;
@@ -85,40 +92,82 @@ async function handleLogout() {
 .logo {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  flex-shrink: 0;
 }
 
 .logo-icon {
-  font-size: 24px;
+  font-size: 22px;
+  color: var(--color-info);
 }
 
 .logo h1 {
-  font-size: 22px;
+  font-size: 20px;
   font-family: var(--font-heading);
+  font-weight: 800;
   letter-spacing: -0.5px;
 }
 
-.status-indicator {
+.logo-accent {
+  color: var(--color-info);
+}
+
+.header-search {
+  flex-shrink: 0;
+}
+
+.tabs {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+}
+
+.tab {
+  padding: 6px 14px;
+  border-radius: 9999px;
   font-size: 13px;
+  font-weight: 600;
   color: var(--text-secondary);
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 
-.pulse-dot {
-  width: 8px;
-  height: 8px;
-  background-color: var(--color-success);
-  border-radius: 50%;
-  box-shadow: 0 0 8px var(--color-success);
-  animation: pulse-glow 2s infinite;
+.tab:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.05);
 }
 
-@keyframes pulse-glow {
-  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
-  70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
-  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+.tab.active {
+  color: var(--color-info);
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.tab.disabled {
+  color: var(--text-tertiary);
+}
+
+.header-spacer {
+  flex: 1;
+}
+
+.icon-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 9999px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.icon-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .workspace {

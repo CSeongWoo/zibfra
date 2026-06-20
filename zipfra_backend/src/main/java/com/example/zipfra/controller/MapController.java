@@ -2,6 +2,7 @@ package com.example.zipfra.controller;
 
 import java.time.Duration;
 
+import com.example.zipfra.dto.map.MarkerFilter;
 import com.example.zipfra.dto.map.MarkerResponse;
 import com.example.zipfra.service.MapService;
 import org.springframework.http.CacheControl;
@@ -32,9 +33,14 @@ public class MapController {
             @RequestParam String bbox,
             @RequestParam int zoom,
             @RequestParam(required = false) Integer page,
-            @RequestParam(required = false) Integer size) {
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) String dealType,
+            @RequestParam(required = false) String propertyType,
+            @RequestParam(required = false) Integer priceMin,
+            @RequestParam(required = false) Integer priceMax) {
 
-        MarkerResponse body = mapService.getMarkers(bbox, zoom, page, size);
+        MarkerFilter filter = new MarkerFilter(dealType, propertyType, priceMin, priceMax);
+        MarkerResponse body = mapService.getMarkers(bbox, zoom, page, size, filter);
 
         ResponseEntity.BodyBuilder builder = ResponseEntity.ok().header("X-Api-Version", "1");
         if (SUMMARY.equals(body.getStrategy())) {
