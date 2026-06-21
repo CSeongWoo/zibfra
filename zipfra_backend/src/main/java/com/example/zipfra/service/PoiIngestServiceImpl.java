@@ -2,9 +2,11 @@ package com.example.zipfra.service;
 
 import java.net.URI;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.example.zipfra.dto.ingest.GridCell;
 import com.example.zipfra.dto.map.Bbox;
 import com.example.zipfra.mapper.postgis.IngestionMapper;
 import com.example.zipfra.util.BboxValidator;
@@ -75,13 +77,43 @@ public class PoiIngestServiceImpl implements PoiIngestService {
                 double x2 = Math.min(x + STEP, b.maxLng());
                 double y2 = Math.min(y + STEP, b.maxLat());
                 String rect = x + "," + y + "," + x2 + "," + y2;
-                for (Map.Entry<String, String> e : CATEGORY_MAP.entrySet()) {
-                    total += fetchCategory(e.getKey(), e.getValue(), rect, seen);
-                }
+                total += fetchAllCategories(rect, seen);
             }
         }
         log.info("[poi-ingest] bbox={} 적재 {} 건", bboxRaw, total);
         return total;
+    }
+
+    @Override
+    public int ingestPoisNationwide() {
+        List<GridCell> cells = ingestionMapper.findPropertyGridCells();
+        ingestionMapper.clearPoi();   // 1회 비움 후 매물 격자만 적재
+
+        Set<String> seen = new HashSet<>();
+        int total = 0;
+        int i = 0;
+        int size = cells.size();
+        for (GridCell c : cells) {
+            i++;
+            double x = c.getMinLng();
+            double y = c.getMinLat();
+            String rect = x + "," + y + "," + (x + STEP) + "," + (y + STEP);
+            total += fetchAllCategories(rect, seen);
+            if (i % 100 == 0 || i == size) {
+                log.info("[poi-nationwide] ({}/{}) 격자 처리, 누적 {} 건", i, size, total);
+            }
+        }
+        log.info("[poi-nationwide] 전국 POI 적재 완료: 격자 {} 개, 총 {} 건", size, total);
+        return total;
+    }
+
+    /** 한 격자(rect)에 대해 전 카테고리 검색·적재. */
+    private int fetchAllCategories(String rect, Set<String> seen) {
+        int added = 0;
+        for (Map.Entry<String, String> e : CATEGORY_MAP.entrySet()) {
+            added += fetchCategory(e.getKey(), e.getValue(), rect, seen);
+        }
+        return added;
     }
 
     private int fetchCategory(String ourCategory, String code, String rect, Set<String> seen) {

@@ -11,4 +11,11 @@ public interface PoiIngestService {
      * @return 적재된 POI 건수(중복 제외)
      */
     int ingestPois(String bbox);
+
+    /**
+     * 전국 POI 적재(§9). 빈 격자 낭비를 피해 <b>매물이 존재하는 0.02도 격자만</b> 순회하며 카카오 카테고리 검색.
+     * {@code clearPoi()} 1회 후 격자×카테고리 적재(전역 중복제거). 점수(POI 반경) 전국 정확도 확보용.
+     * @return 적재된 POI 건수(중복 제외)
+     */
+    int ingestPoisNationwide();
 }

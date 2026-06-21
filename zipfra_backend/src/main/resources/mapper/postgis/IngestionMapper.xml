@@ -5,20 +5,20 @@
 
     <!-- §9 실거래가 적재(PostGIS 쓰기). geom 은 ST_SetSRID(ST_MakePoint(lng,lat),4326). -->
 
-    <delete id="deleteAptTrade">
+    <delete id="deleteRealEstate">
         DELETE FROM real_estate_sales
         WHERE lawd_cd = #{lawdCd}
           AND deal_ym = #{dealYm}
-          AND deal_type = 'SALE'
-          AND property_type = 'APT'
+          AND deal_type = #{dealType}
+          AND property_type = #{propertyType}
     </delete>
 
-    <insert id="insertAptTrade">
+    <insert id="insertRealEstate">
         INSERT INTO real_estate_sales
-            (building_name, deal_amount, deal_type, property_type,
+            (building_name, deal_amount, deal_type, property_type, deposit, monthly_rent,
              exclusive_area, floor_no, build_year, deal_ym, lawd_cd, jibun, geom)
         VALUES
-            (#{buildingName}, #{dealAmount}, 'SALE', 'APT',
+            (#{buildingName}, #{dealAmount}, #{dealType}, #{propertyType}, #{deposit}, #{monthlyRent},
              #{exclusiveArea}, #{floorNo}, #{buildYear}, #{dealYm}, #{lawdCd}, #{jibun},
              ST_SetSRID(ST_MakePoint(#{lng}, #{lat}), 4326))
     </insert>
@@ -48,6 +48,14 @@
         FROM real_estate_sales
         WHERE deal_type = 'SALE' AND deal_amount IS NOT NULL
         GROUP BY LEFT(lawd_cd, 5)
+    </select>
+
+    <!-- 매물 존재 0.02도 격자 좌하단 좌표(전국 POI 격자 적재 대상, §9) -->
+    <select id="findPropertyGridCells" resultType="com.example.zipfra.dto.ingest.GridCell">
+        SELECT DISTINCT
+               floor(ST_X(geom) / 0.02) * 0.02 AS "minLng",
+               floor(ST_Y(geom) / 0.02) * 0.02 AS "minLat"
+        FROM real_estate_sales
     </select>
 
     <insert id="insertRegionSummary">

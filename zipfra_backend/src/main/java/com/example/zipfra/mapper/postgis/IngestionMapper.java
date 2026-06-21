@@ -2,6 +2,7 @@ package com.example.zipfra.mapper.postgis;
 
 import java.util.List;
 
+import com.example.zipfra.dto.ingest.GridCell;
 import com.example.zipfra.dto.ingest.RealEstateRow;
 import com.example.zipfra.dto.ingest.RegionAgg;
 import org.apache.ibatis.annotations.Mapper;
@@ -14,11 +15,12 @@ import org.apache.ibatis.annotations.Param;
 @Mapper
 public interface IngestionMapper {
 
-    /** 동일 지역·월의 아파트 매매 적재분 삭제(재적재 멱등). */
-    int deleteAptTrade(@Param("lawdCd") String lawdCd, @Param("dealYm") String dealYm);
+    /** 동일 지역·월·종류·거래유형 적재분 삭제(재적재 멱등). */
+    int deleteRealEstate(@Param("lawdCd") String lawdCd, @Param("dealYm") String dealYm,
+                         @Param("dealType") String dealType, @Param("propertyType") String propertyType);
 
     /** 1행 insert (geom 은 ST_MakePoint 로 생성). */
-    int insertAptTrade(RealEstateRow row);
+    int insertRealEstate(RealEstateRow row);
 
     /** POI 전체 삭제(더미/기존 제거 후 실데이터 재적재). */
     int clearPoi();
@@ -34,6 +36,9 @@ public interface IngestionMapper {
 
     /** real_estate_sales 를 시군구(lawd_cd)별 집계(SALE 기준). */
     List<RegionAgg> aggregateRealEstateByLawd();
+
+    /** 매물이 존재하는 0.02도 격자의 좌하단 좌표 목록(전국 POI 격자 적재 대상, §9). */
+    List<GridCell> findPropertyGridCells();
 
     /** region_summary 1행 insert (geom 은 중심 좌표). */
     int insertRegionSummary(@Param("regionCd") String regionCd,

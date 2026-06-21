@@ -35,6 +35,7 @@ public class AdminController {
 
     @PostMapping("/ingest/real-estate")
     public ResponseEntity<Map<String, Object>> ingestRealEstate(
+            @RequestParam(defaultValue = "APT_TRADE") String source,
             @RequestParam String lawdCd,
             @RequestParam String dealYmd) {
 
@@ -44,10 +45,24 @@ public class AdminController {
         if (!dealYmd.matches("\\d{6}")) {
             throw new ApiException(ErrorCode.INVALID_PARAM, "dealYmd 는 YYYYMM 6자리여야 합니다: " + dealYmd);
         }
-        int ingested = ingestionService.ingestAptTrade(lawdCd, dealYmd);
+        int ingested = ingestionService.ingestRealEstate(source, lawdCd, dealYmd);
         return ResponseEntity.ok()
                 .header("X-Api-Version", "1")
-                .body(Map.of("lawdCd", lawdCd, "dealYmd", dealYmd, "ingested", ingested));
+                .body(Map.of("source", source, "lawdCd", lawdCd, "dealYmd", dealYmd, "ingested", ingested));
+    }
+
+    /** 전국 244개 시군구 실거래가 DETAIL 일괄 적재(§9). sources 비면 6종 전부, 지정 시 해당 소스만. 수 분~수십 분 소요. */
+    @PostMapping("/ingest/real-estate/nationwide")
+    public ResponseEntity<Map<String, Object>> ingestRealEstateNationwide(
+            @RequestParam String dealYmd,
+            @RequestParam(required = false) String sources) {
+        if (!dealYmd.matches("\\d{6}")) {
+            throw new ApiException(ErrorCode.INVALID_PARAM, "dealYmd 는 YYYYMM 6자리여야 합니다: " + dealYmd);
+        }
+        int ingested = ingestionService.ingestRealEstateNationwide(dealYmd, sources);
+        return ResponseEntity.ok()
+                .header("X-Api-Version", "1")
+                .body(Map.of("dealYmd", dealYmd, "sources", sources != null ? sources : "ALL", "ingested", ingested));
     }
 
     /** POI 실데이터 적재(카카오 카테고리 검색, §9). bbox=minLng,minLat,maxLng,maxLat */
@@ -57,6 +72,15 @@ public class AdminController {
         return ResponseEntity.ok()
                 .header("X-Api-Version", "1")
                 .body(Map.of("bbox", bbox, "ingested", ingested));
+    }
+
+    /** 전국 POI 적재(§9). 매물 존재 격자만 순회(빈 격자 낭비 회피). 카카오 쿼터·시간 소요 — 수십 분~수 시간. */
+    @PostMapping("/ingest/poi/nationwide")
+    public ResponseEntity<Map<String, Object>> ingestPoiNationwide() {
+        int ingested = poiIngestService.ingestPoisNationwide();
+        return ResponseEntity.ok()
+                .header("X-Api-Version", "1")
+                .body(Map.of("ingested", ingested));
     }
 
     /** 매물 점수 전체 재계산(§5.1). 매물·POI 적재 후 호출 — 최신 POI 기준 base 갱신. */

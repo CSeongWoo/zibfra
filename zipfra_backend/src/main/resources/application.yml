@@ -43,11 +43,17 @@ spring:
 public-data:
   service-key: ${PUBLIC_DATA_SERVICE_KEY:}
   base-url: http://apis.data.go.kr/1613000
-  # source → 엔드포인트 path 매핑(MOLIT_APT 확정, ROW/COMMERCE 는 신청 API 실제 endpoint 로 확정 필요)
+  # source → 엔드포인트 path 매핑. 실거래가 6종(아파트/오피스텔/연립다세대 × 매매/전월세).
   paths:
     MOLIT_APT: /RTMSDataSvcAptTrade/getRTMSDataSvcAptTrade
     MOLIT_ROW: /RTMSDataSvcRHTrade/getRTMSDataSvcRHTrade
     COMMERCE: /RTMSDataSvcNrgTrade/getRTMSDataSvcNrgTrade
+    APT_TRADE: /RTMSDataSvcAptTrade/getRTMSDataSvcAptTrade
+    APT_RENT: /RTMSDataSvcAptRent/getRTMSDataSvcAptRent
+    OFFI_TRADE: /RTMSDataSvcOffiTrade/getRTMSDataSvcOffiTrade
+    OFFI_RENT: /RTMSDataSvcOffiRent/getRTMSDataSvcOffiRent
+    RH_TRADE: /RTMSDataSvcRHTrade/getRTMSDataSvcRHTrade
+    RH_RENT: /RTMSDataSvcRHRent/getRTMSDataSvcRHRent
 
 # 카카오 로컬 — 적재 시 지번주소 → 좌표 지오코딩(§9 실거래가 적재)
 kakao:

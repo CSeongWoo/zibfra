@@ -9,7 +9,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.net.URI;
+import java.util.List;
 
+import com.example.zipfra.dto.ingest.GridCell;
 import com.example.zipfra.mapper.postgis.IngestionMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -49,6 +51,22 @@ class PoiIngestServiceTest {
         int n = service().ingestPois("127.04,37.50,127.05,37.51");
 
         assertThat(n).isGreaterThan(0); // 11개 카테고리 × 1건
+        verify(ingestionMapper).clearPoi();
+        verify(ingestionMapper, atLeastOnce()).insertPoi(any(), any(), anyDouble(), anyDouble());
+    }
+
+    @Test
+    @DisplayName("전국 POI 적재: 매물 격자만 순회 + clearPoi 1회")
+    void ingestPoisNationwide() {
+        GridCell c1 = new GridCell(); c1.setMinLng(127.02); c1.setMinLat(37.50);
+        GridCell c2 = new GridCell(); c2.setMinLng(129.14); c2.setMinLat(35.16);
+        when(ingestionMapper.findPropertyGridCells()).thenReturn(List.of(c1, c2));
+        when(publicDataRestTemplate.exchange(any(URI.class), eq(HttpMethod.GET), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(ResponseEntity.ok(CAT_JSON));
+
+        int n = service().ingestPoisNationwide();
+
+        assertThat(n).isGreaterThan(0);
         verify(ingestionMapper).clearPoi();
         verify(ingestionMapper, atLeastOnce()).insertPoi(any(), any(), anyDouble(), anyDouble());
     }
