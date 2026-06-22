@@ -5,6 +5,7 @@ import java.util.List;
 import com.example.zipfra.dto.map.MarkerFilter;
 import com.example.zipfra.dto.map.MarkerResponse;
 import com.example.zipfra.dto.map.PoiMarkerDTO;
+import com.example.zipfra.dto.map.PropertySearchDTO;
 
 /**
  * MAP-01 지도 마커 조회 기능 명세 (팀 규칙 #5: 구현 전 인터페이스로 세부 명세).
@@ -41,4 +42,14 @@ public interface MapService {
      * @return bbox 내 선택 그룹 POI 목록(없으면 빈 목록)
      */
     List<PoiMarkerDTO> getPois(String bbox, String groups);
+
+    /**
+     * MAP-03 단지 검색 (§8.1). 우리 {@code real_estate_sales} 의 단지명 부분일치 검색.
+     * 지역(시·구·동) 검색은 프론트 카카오 addressSearch 가 담당 — 본 API 는 단지만 반환.
+     *
+     * @param q     검색어. 2자 미만(공백 제외)이면 빈 목록(seq-scan 낭비·과다결과 방지)
+     * @param limit 결과 상한(생략 시 20, 최대 50 초과 시 {@code INVALID_PARAM})
+     * @return 단지 목록(dealCount 내림차순), 없으면 빈 목록
+     */
+    List<PropertySearchDTO> searchProperties(String q, Integer limit);
 }

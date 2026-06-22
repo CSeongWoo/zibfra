@@ -11,32 +11,25 @@
     -->
 
     <!--
-      bbox + 검색 필터(§8.1.1) 공통 WHERE 조각.
-      가격 필터 대상 컬럼은 dealType 별 분기: JEONSE/WOLSE→deposit, SALE→deal_amount,
-      미지정(전체)→COALESCE(deal_amount, deposit)(매매가 있으면 매매가, 없으면 보증금) — 전월세가 통째 제외되지 않도록.
-      filter 의 각 필드는 null 이면 조건 생략(동적).
+      bbox + 검색 필터(§8.1) 공통 WHERE 조각.
+      거래/매물 유형은 다중선택 → deal_type / property_type IN (...). 빈 리스트면 조건 생략(전체).
+      가격 필터 대상 컬럼은 행별 분기: COALESCE(deal_amount, deposit) — 매매행=deal_amount, 전월세행=deposit
+      (둘이 상호배타). 거래유형 혼합 선택 시에도 각 행이 자기 컬럼 기준으로 걸러진다.
+      filter 의 각 필드는 null/빈 이면 조건 생략(동적).
     -->
     <sql id="bboxAndFilter">
         WHERE geom &amp;&amp; ST_MakeEnvelope(#{bbox.minLng}, #{bbox.minLat}, #{bbox.maxLng}, #{bbox.maxLat}, 4326)
         <if test="filter != null">
-            <if test="filter.dealType != null">AND deal_type = #{filter.dealType}</if>
-            <if test="filter.propertyType != null">AND property_type = #{filter.propertyType}</if>
-            <if test="filter.priceMin != null or filter.priceMax != null">
-                <choose>
-                    <when test="filter.dealType == 'JEONSE' or filter.dealType == 'WOLSE'">
-                        <if test="filter.priceMin != null">AND deposit &gt;= #{filter.priceMin}</if>
-                        <if test="filter.priceMax != null">AND deposit &lt;= #{filter.priceMax}</if>
-                    </when>
-                    <when test="filter.dealType == 'SALE'">
-                        <if test="filter.priceMin != null">AND deal_amount &gt;= #{filter.priceMin}</if>
-                        <if test="filter.priceMax != null">AND deal_amount &lt;= #{filter.priceMax}</if>
-                    </when>
-                    <otherwise>
-                        <if test="filter.priceMin != null">AND COALESCE(deal_amount, deposit) &gt;= #{filter.priceMin}</if>
-                        <if test="filter.priceMax != null">AND COALESCE(deal_amount, deposit) &lt;= #{filter.priceMax}</if>
-                    </otherwise>
-                </choose>
+            <if test="filter.dealTypes != null and !filter.dealTypes.isEmpty()">
+                AND deal_type IN
+                <foreach item="dt" collection="filter.dealTypes" open="(" separator="," close=")">#{dt}</foreach>
             </if>
+            <if test="filter.propertyTypes != null and !filter.propertyTypes.isEmpty()">
+                AND property_type IN
+                <foreach item="pt" collection="filter.propertyTypes" open="(" separator="," close=")">#{pt}</foreach>
+            </if>
+            <if test="filter.priceMin != null">AND COALESCE(deal_amount, deposit) &gt;= #{filter.priceMin}</if>
+            <if test="filter.priceMax != null">AND COALESCE(deal_amount, deposit) &lt;= #{filter.priceMax}</if>
         </if>
     </sql>
 
@@ -70,6 +63,29 @@
         <include refid="bboxAndFilter"/>
         ORDER BY real_estate_sales.id
         LIMIT #{size} OFFSET #{offset}
+    </select>
+
+    <!--
+      MAP-03: 단지명 부분일치 검색 (§8.1).
+      거래(여러 층·면적)를 단지(building_name + lawd_cd) 단위로 묶음 — 중복 행 제거.
+      대표 좌표=단지 거래들의 ST_Centroid, 대표 유형=MODE()(최빈), 면적=MIN~MAX 범위.
+      ILIKE 대소문자 무시 부분일치. 170k seq-scan(데모 OK; 대량화 시 pg_trgm GIN 인덱스).
+    -->
+    <select id="searchProperties" resultType="com.example.zipfra.dto.map.PropertySearchDTO">
+        SELECT MIN(id)                                            AS id,
+               building_name,
+               ST_Y(ST_Centroid(ST_Collect(geom)))               AS lat,
+               ST_X(ST_Centroid(ST_Collect(geom)))               AS lng,
+               MODE() WITHIN GROUP (ORDER BY property_type)       AS property_type,
+               COUNT(*)                                          AS deal_count,
+               MIN(exclusive_area)                               AS min_area,
+               MAX(exclusive_area)                               AS max_area,
+               MAX(build_year)                                   AS build_year
+        FROM real_estate_sales
+        WHERE building_name ILIKE ('%' || #{q} || '%')
+        GROUP BY building_name, lawd_cd
+        ORDER BY deal_count DESC
+        LIMIT #{limit}
     </select>
 
     <!-- SUMMARY: bbox 내 시·군·구 사전 집계 -->

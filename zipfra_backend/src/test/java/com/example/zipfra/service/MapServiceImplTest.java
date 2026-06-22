@@ -29,6 +29,10 @@ class MapServiceImplTest {
     private static final String HUGE_BBOX = "120.0,33.0,130.0,39.0";    // 대각 > 150km
     private static final MarkerFilter NO_FILTER = new MarkerFilter(null, null, null, null);
 
+    private static MarkerFilter filter(List<String> dealTypes, List<String> propertyTypes, Integer min, Integer max) {
+        return new MarkerFilter(dealTypes, propertyTypes, min, max);
+    }
+
     @Mock
     private MarkerMapper markerMapper;
 
@@ -116,7 +120,7 @@ class MapServiceImplTest {
     @Test
     @DisplayName("T-10: dealType 값 불량 → INVALID_PARAM (mapper 호출 전 거부)")
     void invalidDealType_rejected() {
-        MarkerFilter bad = new MarkerFilter("INVALID", null, null, null);
+        MarkerFilter bad = filter(List.of("INVALID"), null, null, null);
         assertThatThrownBy(() -> service().getMarkers(SMALL_BBOX, 15, null, null, bad))
                 .isInstanceOf(ApiException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.INVALID_PARAM);
@@ -125,7 +129,7 @@ class MapServiceImplTest {
     @Test
     @DisplayName("T-10: propertyType 값 불량 → INVALID_PARAM")
     void invalidPropertyType_rejected() {
-        MarkerFilter bad = new MarkerFilter(null, "VILLA_TYPO", null, null);
+        MarkerFilter bad = filter(null, List.of("VILLA_TYPO"), null, null);
         assertThatThrownBy(() -> service().getMarkers(SMALL_BBOX, 15, null, null, bad))
                 .isInstanceOf(ApiException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.INVALID_PARAM);
@@ -136,9 +140,51 @@ class MapServiceImplTest {
     void validFilter_passes() {
         when(markerMapper.countMarkers(any(), any())).thenReturn(0L);
         when(markerMapper.findMarkers(any(), any(), anyInt(), anyLong())).thenReturn(List.of());
-        MarkerFilter ok = new MarkerFilter("SALE", "APT", 10000, 50000);
+        MarkerFilter ok = filter(List.of("SALE"), List.of("APT"), 10000, 50000);
         MarkerResponse res = service().getMarkers(SMALL_BBOX, 15, null, null, ok);
         assertThat(res.getStrategy()).isEqualTo("DETAIL");
+    }
+
+    @Test
+    @DisplayName("T-10: 다중선택(SALE,JEONSE / APT,OFFICETEL) 유효 → DETAIL")
+    void multiSelectFilter_passes() {
+        when(markerMapper.countMarkers(any(), any())).thenReturn(0L);
+        when(markerMapper.findMarkers(any(), any(), anyInt(), anyLong())).thenReturn(List.of());
+        MarkerFilter multi = filter(List.of("SALE", "JEONSE"), List.of("APT", "OFFICETEL"), null, null);
+        MarkerResponse res = service().getMarkers(SMALL_BBOX, 15, null, null, multi);
+        assertThat(res.getStrategy()).isEqualTo("DETAIL");
+    }
+
+    @Test
+    @DisplayName("T-10: 다중선택 중 한 원소라도 불량이면 INVALID_PARAM")
+    void multiSelectFilter_oneInvalid_rejected() {
+        MarkerFilter bad = filter(List.of("SALE", "INVALID"), null, null, null);
+        assertThatThrownBy(() -> service().getMarkers(SMALL_BBOX, 15, null, null, bad))
+                .isInstanceOf(ApiException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_PARAM);
+    }
+
+    @Test
+    @DisplayName("MAP-03: 2자 미만 검색어 → 빈 결과(mapper 미호출)")
+    void search_tooShort() {
+        assertThat(service().searchProperties("가", null)).isEmpty();
+        assertThat(service().searchProperties(" ", null)).isEmpty();
+        assertThat(service().searchProperties(null, null)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("MAP-03: 유효 검색어 → mapper 호출(기본 limit 20)")
+    void search_valid() {
+        when(markerMapper.searchProperties(any(), anyInt())).thenReturn(List.of());
+        assertThat(service().searchProperties("래미안", null)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("MAP-03: limit=51 → INVALID_PARAM")
+    void search_limitExceeded() {
+        assertThatThrownBy(() -> service().searchProperties("래미안", 51))
+                .isInstanceOf(ApiException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_PARAM);
     }
 
     @Test

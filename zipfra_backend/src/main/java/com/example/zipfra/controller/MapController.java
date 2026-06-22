@@ -6,6 +6,7 @@ import java.util.List;
 import com.example.zipfra.dto.map.MarkerFilter;
 import com.example.zipfra.dto.map.MarkerResponse;
 import com.example.zipfra.dto.map.PoiMarkerDTO;
+import com.example.zipfra.dto.map.PropertySearchDTO;
 import com.example.zipfra.service.MapService;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
@@ -36,8 +37,8 @@ public class MapController {
             @RequestParam int zoom,
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size,
-            @RequestParam(required = false) String dealType,
-            @RequestParam(required = false) String propertyType,
+            @RequestParam(required = false) List<String> dealType,
+            @RequestParam(required = false) List<String> propertyType,
             @RequestParam(required = false) Integer priceMin,
             @RequestParam(required = false) Integer priceMax) {
 
@@ -56,6 +57,19 @@ public class MapController {
             builder.cacheControl(CacheControl.noStore());
         }
         return builder.body(body);
+    }
+
+    /** MAP-03: 단지 검색 (Public, §8.1). 단지명 부분일치 → 단지 단위 집계 목록. 지역 검색은 프론트 카카오 담당. */
+    @GetMapping("/search")
+    public ResponseEntity<List<PropertySearchDTO>> searchProperties(
+            @RequestParam String q,
+            @RequestParam(required = false) Integer limit) {
+
+        List<PropertySearchDTO> body = mapService.searchProperties(q, limit);
+        return ResponseEntity.ok()
+                .header("X-Api-Version", "1")
+                .cacheControl(CacheControl.noStore())
+                .body(body);
     }
 
     /** MAP-02: POI 오버레이 (Public, §8.1). 인프라 표시 토글이 켠 그룹의 POI 를 bbox 로 조회. */
