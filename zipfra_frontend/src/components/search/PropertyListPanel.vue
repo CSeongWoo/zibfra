@@ -47,6 +47,7 @@
 import { computed } from 'vue';
 import { useMapStore } from '@/stores/map';
 import { totalScore, scoreColor, groupScore, GROUPS } from '@/utils/score';
+import { dealLabel, typeLabel, priceLabel } from '@/utils/price';
 
 const emit = defineEmits(['select']);
 const mapStore = useMapStore();
@@ -55,27 +56,6 @@ const sorted = computed(() =>
   [...mapStore.markers].sort((a, b) => totalScore(b, mapStore.persona) - totalScore(a, mapStore.persona)),
 );
 const scoreOf = (m) => totalScore(m, mapStore.persona);
-
-const DEAL = { SALE: '매매', JEONSE: '전세', WOLSE: '월세' };
-const TYPE = { APT: '아파트', OFFICETEL: '오피스텔', ROW_HOUSE: '빌라' };
-const dealLabel = (v) => DEAL[v] || v || '-';
-const typeLabel = (v) => TYPE[v] || v || '-';
-
-function formatManwon(amount) {
-  if (amount == null) return '-';
-  const eok = Math.floor(amount / 10000);
-  const rest = amount % 10000;
-  if (eok > 0 && rest > 0) return `${eok}억 ${rest.toLocaleString()}`;
-  if (eok > 0) return `${eok}억`;
-  return `${rest.toLocaleString()}만`;
-}
-
-function priceLabel(m) {
-  if (m.dealType === 'SALE') return formatManwon(m.dealAmount);
-  if (m.dealType === 'JEONSE') return formatManwon(m.deposit);
-  if (m.dealType === 'WOLSE') return `${formatManwon(m.deposit)} / 월 ${m.monthlyRent ?? '-'}`;
-  return formatManwon(m.dealAmount ?? m.deposit);
-}
 </script>
 
 <style scoped>

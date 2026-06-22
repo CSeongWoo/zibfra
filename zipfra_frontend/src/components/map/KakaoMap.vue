@@ -7,6 +7,7 @@ import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { useMapStore } from '@/stores/map';
 import { kakaoBoundsToBbox } from '@/utils/bbox';
 import { totalScore, scoreColor, GROUPS } from '@/utils/score';
+import { markerPriceLabel } from '@/utils/price';
 
 // 초기 중심/줌(기본: 강남 삼성동 — 실거래 데이터 밀집 지역). 마커 데이터(MAP-01)는 `markers`로 주입.
 const props = defineProps({
@@ -105,19 +106,30 @@ function renderDetailMarkers() {
     // §5.1: 매물 종합 점수(base×페르소나 가중치 정규화)를 핀 마커로 표시(#6 실시간 반영).
     const score = totalScore(item, mapStore.persona);
     const color = scoreColor(score);
+    const price = markerPriceLabel(item); // 실거래가(만원 단위 포맷)
     const pin = document.createElement('div');
-    pin.style.cssText = 'position:relative;width:36px;height:36px;cursor:pointer;';
+    pin.style.cssText = 'position:relative;cursor:pointer;';
+    // 점수 배지 + 실거래가 알약(Glassmorphism §7.5). 배지 색은 점수 색.
+    const pill = document.createElement('div');
+    pill.style.cssText =
+      'display:flex;align-items:center;gap:5px;padding:3px 9px 3px 3px;border-radius:9999px;'
+      + 'background:rgba(255,255,255,.92);backdrop-filter:blur(4px);'
+      + 'border:1px solid rgba(255,255,255,.6);box-shadow:0 2px 8px rgba(0,0,0,.28);white-space:nowrap;';
     const circle = document.createElement('div');
     circle.textContent = score;
     circle.style.cssText =
-      `width:36px;height:36px;border-radius:50%;background:${color};color:#fff;`
-      + 'display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;'
-      + 'border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.4);';
+      `width:26px;height:26px;border-radius:50%;background:${color};color:#fff;`
+      + 'display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex:none;';
+    const priceEl = document.createElement('span');
+    priceEl.textContent = price;
+    priceEl.style.cssText = 'font-size:12px;font-weight:700;color:#0f172a;';
+    pill.appendChild(circle);
+    pill.appendChild(priceEl);
     const tail = document.createElement('div');
     tail.style.cssText =
       `position:absolute;left:50%;bottom:-6px;transform:translateX(-50%);width:0;height:0;`
       + `border-left:5px solid transparent;border-right:5px solid transparent;border-top:8px solid ${color};`;
-    pin.appendChild(circle);
+    pin.appendChild(pill);
     pin.appendChild(tail);
     // §7.4: 모달 등 상세 구현 금지 — propertyId만 발신.
     pin.addEventListener('click', () => emit('marker-click', item.id));
