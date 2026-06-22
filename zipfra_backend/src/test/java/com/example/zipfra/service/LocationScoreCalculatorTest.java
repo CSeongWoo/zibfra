@@ -13,7 +13,7 @@ import static org.assertj.core.api.Assertions.within;
 
 /**
  * LOC-01 입지 점수 감쇠·합산 단위테스트 (AGENTS.md §2.1 T-7, §5).
- * 순수 계산기라 DB·Spring 없이 검증한다.
+ * 4분류(교통/교육/상업/편의) + <b>그룹 단위 가중치</b>. 순수 계산기라 DB·Spring 없이 검증한다.
  */
 class LocationScoreCalculatorTest {
 
@@ -27,138 +27,115 @@ class LocationScoreCalculatorTest {
     }
 
     @Test
-    @DisplayName("T-7: pharmacy 1개 320m, w=0.8 → contribution 0.800")
-    void essential_oneIsEnough_pharmacy() {
+    @DisplayName("T-7: subway 1개 320m → base 1.000 (one_is_enough, t=4.0≤5→W=1)")
+    void transit_oneIsEnough_subway() {
         var result = calculator.calculate(
-                List.of(poi("PHARMACY", 320)),
-                Map.of("pharmacy", 0.8),
-                false);
+                List.of(poi("SUBWAY", 320)),
+                Map.of("transit", 1.0));
 
-        ScoreResponse.CategoryScore pharmacy =
-                result.breakdown().essential().categories().get("pharmacy");
-        assertThat(pharmacy.base()).isEqualTo(1.0);             // t=4.0 ≤ 5 → W=1
-        assertThat(pharmacy.contribution()).isEqualTo(0.800);
-        assertThat(result.finalScore()).isEqualTo(0.800);
+        ScoreResponse.GroupResult transit = result.breakdown().get("transit");
+        assertThat(transit.categories().get("subway").base()).isEqualTo(1.0);
+        assertThat(transit.score()).isEqualTo(1.000);
+        assertThat(result.finalScore()).isEqualTo(1.000);
     }
 
     @Test
-    @DisplayName("T-7: mart 1개 850m, w=0.6 → contribution 0.133")
-    void essential_oneIsEnough_mart() {
+    @DisplayName("T-7: mart 1개 850m → base 0.2214 (more_is_better), commerce w=0.6 → score 0.133")
+    void commerce_moreIsBetter_mart_withGroupWeight() {
         var result = calculator.calculate(
                 List.of(poi("MART", 850)),
-                Map.of("mart", 0.6),
-                false);
+                Map.of("commerce", 0.6));
 
-        ScoreResponse.CategoryScore mart =
-                result.breakdown().essential().categories().get("mart");
+        ScoreResponse.GroupResult commerce = result.breakdown().get("commerce");
         // t=10.625 > 5 → W = 1/(2.125)² ≈ 0.2214
-        assertThat(mart.base()).isCloseTo(0.2214, within(0.0001));
-        assertThat(mart.contribution()).isEqualTo(0.133);
+        assertThat(commerce.categories().get("mart").base()).isCloseTo(0.2214, within(0.0001));
+        assertThat(commerce.base()).isCloseTo(0.2214, within(0.0001));
+        assertThat(commerce.score()).isEqualTo(0.133);     // 0.2214 × 0.6
+        assertThat(result.finalScore()).isEqualTo(0.133);
     }
 
     @Test
-    @DisplayName("T-7: restaurant 2개[200m,600m], w=0.9 → contribution 1.300 (more_is_better ΣW)")
-    void leisure_moreIsBetter_restaurant() {
+    @DisplayName("T-7: academy 2개[200m,600m] → base 1.4444 (more_is_better ΣW), score 1.444")
+    void education_moreIsBetter_academy() {
         var result = calculator.calculate(
-                List.of(poi("RESTAURANT", 200), poi("RESTAURANT", 600)),
-                Map.of("restaurant", 0.9),
-                false);
+                List.of(poi("ACADEMY", 200), poi("ACADEMY", 600)),
+                Map.of("education", 1.0));
 
-        ScoreResponse.CategoryScore restaurant =
-                result.breakdown().leisure().categories().get("restaurant");
-        assertThat(restaurant.count()).isEqualTo(2);
-        // W=[1.0, 0.4444] → Σ=1.4444 → ×0.9 = 1.300
-        assertThat(restaurant.base()).isCloseTo(1.4444, within(0.0001));
-        assertThat(restaurant.contribution()).isEqualTo(1.300);
+        ScoreResponse.GroupResult education = result.breakdown().get("education");
+        ScoreResponse.CategoryScore academy = education.categories().get("academy");
+        assertThat(academy.count()).isEqualTo(2);
+        // W=[1.0, 0.4444] → Σ=1.4444
+        assertThat(academy.base()).isCloseTo(1.4444, within(0.0001));
+        assertThat(education.score()).isEqualTo(1.444);
     }
 
     @Test
     @DisplayName("경계: t=5.0(=400m) 정확히 → W=1.0 (≤5 분기)")
     void decayBoundary_exactlyFiveMinutes() {
         var result = calculator.calculate(
-                List.of(poi("PHARMACY", 400)),
-                Map.of("pharmacy", 1.0),
-                false);
-        assertThat(result.breakdown().essential().categories().get("pharmacy").base())
+                List.of(poi("SUBWAY", 400)),
+                Map.of("transit", 1.0));
+        assertThat(result.breakdown().get("transit").categories().get("subway").base())
                 .isEqualTo(1.0);
     }
 
     @Test
-    @DisplayName("essential one_is_enough: 같은 카테고리 여러개여도 가장 가까운 1개의 W만")
+    @DisplayName("one_is_enough: 같은 카테고리 여러개여도 가장 가까운 1개의 W만 (subway)")
     void oneIsEnough_usesNearestOnly() {
         var result = calculator.calculate(
-                List.of(poi("PHARMACY", 320), poi("PHARMACY", 1200)),
-                Map.of("pharmacy", 1.0),
-                false);
-        ScoreResponse.CategoryScore pharmacy =
-                result.breakdown().essential().categories().get("pharmacy");
-        assertThat(pharmacy.count()).isEqualTo(2);
-        assertThat(pharmacy.nearestMeters()).isEqualTo(320);
-        assertThat(pharmacy.base()).isEqualTo(1.0);   // 320m 만 반영, 1200m 무시
+                List.of(poi("SUBWAY", 320), poi("SUBWAY", 1200)),
+                Map.of("transit", 1.0));
+
+        ScoreResponse.CategoryScore subway =
+                result.breakdown().get("transit").categories().get("subway");
+        assertThat(subway.count()).isEqualTo(2);
+        assertThat(subway.nearestMeters()).isEqualTo(320);
+        assertThat(subway.base()).isEqualTo(1.0);   // 320m 만 반영, 1200m 무시
     }
 
     @Test
-    @DisplayName("ENV_PENALTY: 서울 좌표 + noise 1개 → contribution 음수, applicable=true")
-    void envPenalty_inSeoul_negativeContribution() {
+    @DisplayName("그룹 가중치는 소속 카테고리 base 합 전체에 곱해진다 (convenience: pharmacy+bank)")
+    void groupWeight_appliesToGroupSum() {
+        // pharmacy 320m(W=1.0) + bank 320m(W=1.0) → convenience base=2.0, w=0.5 → score 1.000
         var result = calculator.calculate(
-                List.of(poi("NOISE", 320)),
-                Map.of("noise", 0.5),
-                true);
+                List.of(poi("PHARMACY", 320), poi("BANK", 320)),
+                Map.of("convenience", 0.5));
 
-        ScoreResponse.GroupResult env = result.breakdown().envPenalty();
-        assertThat(env.applicable()).isTrue();
-        ScoreResponse.CategoryScore noise = env.categories().get("noise");
-        assertThat(noise.contribution()).isEqualTo(-0.500);   // base 1.0 × 0.5, 음수
-        assertThat(result.finalScore()).isEqualTo(-0.500);
+        ScoreResponse.GroupResult convenience = result.breakdown().get("convenience");
+        assertThat(convenience.base()).isEqualTo(2.0);
+        assertThat(convenience.weight()).isEqualTo(0.5);
+        assertThat(convenience.score()).isEqualTo(1.000);
+        assertThat(result.finalScore()).isEqualTo(1.000);
     }
 
     @Test
-    @DisplayName("ENV_PENALTY: 서울 외 좌표 → 항목 제외(applicable=false), finalScore 에서 빠짐(0 아님)")
-    void envPenalty_outsideSeoul_excluded() {
+    @DisplayName("전국 적용: breakdown 은 항상 4그룹, 서울 개념/감점 없음")
+    void allGroups_nationwide_noEnvPenalty() {
         var result = calculator.calculate(
-                List.of(poi("NOISE", 100), poi("PHARMACY", 320)),
-                Map.of("noise", 1.0, "pharmacy", 0.8),
-                false);
+                List.of(poi("SUBWAY", 320), poi("RESTAURANT", 200), poi("RESTAURANT", 600)),
+                Map.of("transit", 1.0, "commerce", 0.9));
 
-        ScoreResponse.GroupResult env = result.breakdown().envPenalty();
-        assertThat(env.applicable()).isFalse();
-        assertThat(env.categories()).isNull();          // 항목 제외
-        assertThat(result.finalScore()).isEqualTo(0.800); // pharmacy 만, noise 감점 미포함
-    }
-
-    @Test
-    @DisplayName("TRANSIT: subway one_is_enough + bus_stop more_is_better, 서울 외에도 전국 적용")
-    void transit_subwayAndBusStop_appliedNationwide() {
-        var result = calculator.calculate(
-                List.of(poi("SUBWAY", 320), poi("BUS_STOP", 200), poi("BUS_STOP", 600)),
-                Map.of("subway", 1.0, "bus_stop", 0.9),
-                false);   // 서울 외 좌표여도 TRANSIT 은 산출됨(ENV_PENALTY 와 대비)
-
-        ScoreResponse.GroupResult transit = result.breakdown().transit();
-        // subway: t=4.0 ≤ 5 → W=1.0, w=1.0 → contribution 1.000
-        assertThat(transit.categories().get("subway").base()).isEqualTo(1.0);
-        assertThat(transit.categories().get("subway").contribution()).isEqualTo(1.000);
-        // bus_stop: W=[1.0, 0.4444] Σ=1.4444, w=0.9 → contribution 1.300
-        ScoreResponse.CategoryScore bus = transit.categories().get("bus_stop");
-        assertThat(bus.count()).isEqualTo(2);
-        assertThat(bus.base()).isCloseTo(1.4444, within(0.0001));
-        assertThat(bus.contribution()).isEqualTo(1.300);
-        // 그룹 합 + finalScore (서울 외에도 빠지지 않음)
-        assertThat(transit.score()).isEqualTo(2.300);
+        assertThat(result.breakdown().keySet())
+                .containsExactlyInAnyOrder("transit", "education", "commerce", "convenience");
+        // transit: subway W=1.0 → 1.000
+        assertThat(result.breakdown().get("transit").score()).isEqualTo(1.000);
+        // commerce: restaurant Σ=1.4444, w=0.9 → 1.300
+        assertThat(result.breakdown().get("commerce").categories().get("restaurant").base())
+                .isCloseTo(1.4444, within(0.0001));
+        assertThat(result.breakdown().get("commerce").score()).isEqualTo(1.300);
         assertThat(result.finalScore()).isEqualTo(2.300);
     }
 
     @Test
-    @DisplayName("생략된 가중치는 0.0 으로 간주되어 contribution 0")
+    @DisplayName("생략된 그룹 가중치는 0.0 으로 간주되어 score 0")
     void omittedWeight_treatedAsZero() {
         var result = calculator.calculate(
                 List.of(poi("BANK", 100)),
-                Map.of(),   // 가중치 전부 생략
-                false);
-        ScoreResponse.CategoryScore bank =
-                result.breakdown().essential().categories().get("bank");
-        assertThat(bank.weight()).isEqualTo(0.0);
-        assertThat(bank.contribution()).isEqualTo(0.0);
+                Map.of());   // 가중치 전부 생략
+
+        ScoreResponse.GroupResult convenience = result.breakdown().get("convenience");
+        assertThat(convenience.weight()).isEqualTo(0.0);
+        assertThat(convenience.score()).isEqualTo(0.0);
         assertThat(result.finalScore()).isEqualTo(0.0);
     }
 }

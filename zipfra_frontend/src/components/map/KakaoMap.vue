@@ -6,6 +6,8 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { useMapStore } from '@/stores/map';
 import { kakaoBoundsToBbox } from '@/utils/bbox';
+import { totalScore, scoreColor, GROUPS } from '@/utils/score';
+import { markerPriceLabel } from '@/utils/price';
 
 // 초기 중심/줌(기본: 강남 삼성동 — 실거래 데이터 밀집 지역). 마커 데이터(MAP-01)는 `markers`로 주입.
 const props = defineProps({
@@ -33,19 +35,112 @@ function syncViewport() {
   emit('viewport-change', { bbox, level });
 }
 
-function renderMarkers() {
+// §7.1 전략 분기: DETAIL=개별 매물 핀, SUMMARY=시·군·구 집계 풍선.
+function render() {
   if (!map) return;
-  const { kakao } = window;
   markerObjects.forEach((m) => m.setMap(null));
   markerObjects.length = 0;
-  props.markers.forEach((item) => {
-    const marker = new kakao.maps.Marker({
-      position: new kakao.maps.LatLng(item.lat, item.lng),
-      map,
+  if (mapStore.strategy === 'SUMMARY') {
+    renderRegions();
+  } else {
+    renderDetailMarkers();
+    renderPois(); // MAP-02 인프라 오버레이(켜진 그룹 POI)
+  }
+}
+
+// MAP-02: 켜진 인프라 그룹의 POI 를 그룹색 작은 점으로(매물 핀과 구분). 클릭 비활성.
+function renderPois() {
+  const { kakao } = window;
+  mapStore.pois.forEach((p) => {
+    const grp = GROUPS.find((x) => x.key === p.group);
+    const color = grp ? grp.color : '#888';
+    const dot = document.createElement('div');
+    dot.title = p.name || '';
+    dot.style.cssText =
+      `width:10px;height:10px;border-radius:50%;background:${color};`
+      + 'border:1.5px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4);';
+    const overlay = new kakao.maps.CustomOverlay({
+      position: new kakao.maps.LatLng(p.lat, p.lng),
+      content: dot,
+      yAnchor: 0.5,
+      clickable: false,
     });
+    overlay.setMap(map);
+    markerObjects.push(overlay);
+  });
+}
+
+// SUMMARY: 시·군·구 중심에 집계 풍선(지역명 + 거래건수). 클릭 시 그 지역으로 줌인.
+function renderRegions() {
+  const { kakao } = window;
+  mapStore.regions.forEach((r) => {
+    const bubble = document.createElement('div');
+    bubble.style.cssText =
+      'display:flex;flex-direction:column;align-items:center;justify-content:center;'
+      + 'width:62px;height:62px;border-radius:50%;background:rgba(37,99,235,0.85);'
+      + 'color:#fff;border:2px solid rgba(255,255,255,.45);box-shadow:0 4px 12px rgba(0,0,0,.45);'
+      + 'cursor:pointer;text-align:center;line-height:1.2;';
+    bubble.innerHTML =
+      `<span style="font-size:10px;opacity:.9;">${r.regionName ?? ''}</span>`
+      + `<span style="font-size:15px;font-weight:800;">${r.dealCount ?? 0}</span>`;
+    // §7.4: 풍선 클릭 → 해당 지역으로 줌인(DETAIL 전환). 지도 제어만, 상세 모달 X.
+    bubble.addEventListener('click', () => {
+      map.setCenter(new kakao.maps.LatLng(r.lat, r.lng));
+      map.setLevel(5); // ≈ DETAIL
+    });
+    const overlay = new kakao.maps.CustomOverlay({
+      position: new kakao.maps.LatLng(r.lat, r.lng),
+      content: bubble,
+      yAnchor: 0.5,
+      clickable: true,
+    });
+    overlay.setMap(map);
+    markerObjects.push(overlay);
+  });
+}
+
+// DETAIL: 개별 매물 점수 핀.
+function renderDetailMarkers() {
+  const { kakao } = window;
+  props.markers.forEach((item) => {
+    // §5.1: 매물 종합 점수(base×페르소나 가중치 정규화)를 핀 마커로 표시(#6 실시간 반영).
+    const score = totalScore(item, mapStore.persona);
+    const color = scoreColor(score);
+    const price = markerPriceLabel(item); // 실거래가(만원 단위 포맷)
+    const pin = document.createElement('div');
+    pin.style.cssText = 'position:relative;cursor:pointer;';
+    // 점수 배지 + 실거래가 알약(Glassmorphism §7.5). 배지 색은 점수 색.
+    const pill = document.createElement('div');
+    pill.style.cssText =
+      'display:flex;align-items:center;gap:5px;padding:3px 9px 3px 3px;border-radius:9999px;'
+      + 'background:rgba(255,255,255,.92);backdrop-filter:blur(4px);'
+      + 'border:1px solid rgba(255,255,255,.6);box-shadow:0 2px 8px rgba(0,0,0,.28);white-space:nowrap;';
+    const circle = document.createElement('div');
+    circle.textContent = score;
+    circle.style.cssText =
+      `width:26px;height:26px;border-radius:50%;background:${color};color:#fff;`
+      + 'display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex:none;';
+    const priceEl = document.createElement('span');
+    priceEl.textContent = price;
+    priceEl.style.cssText = 'font-size:12px;font-weight:700;color:#0f172a;';
+    pill.appendChild(circle);
+    pill.appendChild(priceEl);
+    const tail = document.createElement('div');
+    tail.style.cssText =
+      `position:absolute;left:50%;bottom:-6px;transform:translateX(-50%);width:0;height:0;`
+      + `border-left:5px solid transparent;border-right:5px solid transparent;border-top:8px solid ${color};`;
+    pin.appendChild(pill);
+    pin.appendChild(tail);
     // §7.4: 모달 등 상세 구현 금지 — propertyId만 발신.
-    kakao.maps.event.addListener(marker, 'click', () => emit('marker-click', item.id));
-    markerObjects.push(marker);
+    pin.addEventListener('click', () => emit('marker-click', item.id));
+    const overlay = new kakao.maps.CustomOverlay({
+      position: new kakao.maps.LatLng(item.lat, item.lng),
+      content: pin,
+      yAnchor: 1.0, // 핀 꼬리 끝이 좌표에 닿도록
+      clickable: true,
+    });
+    overlay.setMap(map);
+    markerObjects.push(overlay);
   });
 }
 
@@ -63,11 +158,31 @@ function initMap() {
     emit('map-click', { lat: latlng.getLat(), lng: latlng.getLng() });
   };
   kakao.maps.event.addListener(map, 'click', clickListener);
-  renderMarkers();
+  render();
   syncViewport(); // 초기 1회
 }
 
-watch(() => props.markers, renderMarkers, { deep: true });
+watch(() => props.markers, render, { deep: true });
+// SUMMARY 집계 풍선 갱신.
+watch(() => mapStore.regions, render, { deep: true });
+// 전략(DETAIL↔SUMMARY) 전환 시 즉시 재렌더.
+watch(() => mapStore.strategy, render);
+// MAP-02 POI 오버레이 갱신.
+watch(() => mapStore.pois, render, { deep: true });
+// #6: 페르소나 가중치 변경 시 배지 점수·색상 실시간 갱신.
+watch(() => mapStore.persona, render, { deep: true });
+// #7: 검색·현위치 이동 명령 → 지도 중심/레벨 변경(이후 idle 이벤트가 markers 재조회).
+watch(() => mapStore.moveTarget, (t) => {
+  if (!map || !t) return;
+  const { kakao } = window;
+  map.setCenter(new kakao.maps.LatLng(t.lat, t.lng));
+  if (t.level != null) map.setLevel(t.level);
+});
+// #7: 줌 +/- 버튼 → 레벨 변경(delta +1=줌인이므로 level 감소).
+watch(() => mapStore.zoomReq, (z) => {
+  if (!map || !z) return;
+  map.setLevel(map.getLevel() - z.delta);
+});
 
 onMounted(() => {
   const { kakao } = window;

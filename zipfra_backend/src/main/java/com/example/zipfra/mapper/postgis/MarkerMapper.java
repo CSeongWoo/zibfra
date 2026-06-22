@@ -4,6 +4,7 @@ import java.util.List;
 
 import com.example.zipfra.dto.map.Bbox;
 import com.example.zipfra.dto.map.MarkerDTO;
+import com.example.zipfra.dto.map.MarkerFilter;
 import com.example.zipfra.dto.map.RegionSummaryDTO;
 import org.apache.ibatis.annotations.Param;
 
@@ -13,11 +14,12 @@ import org.apache.ibatis.annotations.Param;
  */
 public interface MarkerMapper {
 
-    /** DETAIL: bbox 내 매물 총 개수(페이지네이션 totalCount 용). */
-    long countMarkers(@Param("bbox") Bbox bbox);
+    /** DETAIL: bbox + 검색 필터 매칭 매물 총 개수(페이지네이션 totalCount 용). */
+    long countMarkers(@Param("bbox") Bbox bbox, @Param("filter") MarkerFilter filter);
 
-    /** DETAIL: bbox 내 매물 마커 페이지. */
+    /** DETAIL: bbox + 검색 필터 매칭 매물 마커 페이지. */
     List<MarkerDTO> findMarkers(@Param("bbox") Bbox bbox,
+                                @Param("filter") MarkerFilter filter,
                                 @Param("size") int size,
                                 @Param("offset") long offset);
 

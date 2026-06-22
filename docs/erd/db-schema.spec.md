@@ -75,9 +75,14 @@ erDiagram
     pg_real_estate_sales {
         bigint      id PK "BIGSERIAL"
         varchar     building_name
-        bigint      deal_amount "거래금액(만원)"
+        varchar     deal_type "SALE|JEONSE|WOLSE"
+        varchar     property_type "APT|OFFICETEL|ROW_HOUSE"
+        bigint      deal_amount "매매가(만원), 전월세 NULL"
+        bigint      deposit "보증금(만원), 전월세"
+        int         monthly_rent "월세(만원), 월세만/전세 0·NULL"
         numeric     exclusive_area "전용면적㎡"
         int         floor_no
+        smallint    build_year "건축년도"
         char        deal_ym "거래연월 YYYYMM"
         varchar     lawd_cd "법정동코드(10)"
         varchar     jibun "지번주소"
@@ -86,11 +91,20 @@ erDiagram
         timestamptz updated_at
     }
 
+    pg_property_score {
+        bigint      property_id PK "real_estate_sales.id 1:1 (PR A)"
+        numeric     transit_base "§5.1 교통 base(가중치 미적용)"
+        numeric     education_base "학교·학원 base"
+        numeric     commerce_base "상업 base"
+        numeric     convenience_base "편의 base"
+        timestamptz computed_at "배치 계산 시각"
+    }
+
     pg_poi {
         bigint      id PK "BIGSERIAL"
         varchar     name
-        varchar     category "PHARMACY|MART|BANK|RESTAURANT|CAFE|CINEMA"
-        varchar     category_group "ESSENTIAL | LEISURE | ENV"
+        varchar     category "SUBWAY|BUS_STOP|SCHOOL|ACADEMY|RESTAURANT|CAFE|CINEMA|MART|CONVENIENCE_STORE|HOSPITAL|PHARMACY|BANK"
+        varchar     category_group "TRANSIT | EDUCATION | COMMERCE | CONVENIENCE"
         varchar     address
         geometry    geom "Point, 4326 (GiST 인덱스)"
         timestamptz created_at
@@ -122,6 +136,7 @@ erDiagram
     pg_region_summary    ||..o{ mysql_ai_summaries   : "AREA"
     pg_real_estate_sales ||..o{ mysql_favorites      : "property"
     pg_real_estate_sales }o..o{ pg_poi               : "공간조인(ST_DWithin)"
+    pg_real_estate_sales ||--|| pg_property_score    : "매물별 점수(1:1, §5.1)"
 
 ```
 
@@ -203,9 +218,14 @@ erDiagram
 |------|------|------|------|
 | `id` | BIGINT | PK (IDENTITY) | 매물 식별자 |
 | `building_name` | VARCHAR(200) | NULL | 건물명 |
-| `deal_amount` | BIGINT | NOT NULL | 거래금액 (단위: 만원) |
+| `deal_type` | VARCHAR(10) | NOT NULL | 거래유형 `SALE`\|`JEONSE`\|`WOLSE` (PR A 신설) |
+| `property_type` | VARCHAR(20) | NOT NULL | 매물유형 `APT`\|`OFFICETEL`\|`ROW_HOUSE`(빌라) — 3종, 원룸 제외 (PR A 신설) |
+| `deal_amount` | BIGINT | NULL | 매매가(만원). **전월세는 NULL** (기존 NOT NULL → 완화) |
+| `deposit` | BIGINT | NULL | 보증금(만원). 전월세(`JEONSE`/`WOLSE`)일 때 (PR A 신설) |
+| `monthly_rent` | INTEGER | NULL | 월세(만원). `WOLSE`만, `JEONSE`는 0/NULL (PR A 신설) |
 | `exclusive_area` | NUMERIC(7,2) | NOT NULL | 전용면적 (㎡) |
 | `floor_no` | INTEGER | NULL | 층 |
+| `build_year` | SMALLINT | NULL | 건축년도 (PR A 신설) |
 | `deal_ym` | CHAR(6) | NOT NULL | 거래연월 'YYYYMM' |
 | `lawd_cd` | VARCHAR(10) | NOT NULL | 법정동코드 |
 | `jibun` | VARCHAR(200) | NULL | 지번 주소 |
@@ -213,15 +233,29 @@ erDiagram
 | `created_at` | TIMESTAMPTZ | NOT NULL, DEFAULT now() | 적재 시각 |
 | `updated_at` | TIMESTAMPTZ | NOT NULL, DEFAULT now() | 갱신 시각 |
 
-인덱스: `gist_res_geom` GiST(geom), `gist_res_geog` GiST((geom::geography)) (함수형 공간 인덱스), `idx_res_lawd_ym(lawd_cd, deal_ym)`.
+> ⚠️ **가격 컬럼 분리 이유(국토부 공공데이터 정합)**: 매매는 `거래금액`, 전월세는 `보증금`+`월세금액`으로 데이터셋이 분리돼 단일 `deal_amount`로 표현 불가. MAP-01 가격 필터는 `deal_type`별 대상 컬럼 분기(§8.1.1).
+
+인덱스: `gist_res_geom` GiST(geom), `gist_res_geog` GiST((geom::geography)) (함수형 공간 인덱스), `idx_res_lawd_ym(lawd_cd, deal_ym)`, `idx_res_filter(deal_type, property_type)` (MAP-01 검색 필터, PR A 신설).
+
+#### `property_score` — 매물별 점수 사전계산 (PR A, §5.1)
+| 컬럼 | 타입 | 제약 | 설명 |
+|------|------|------|------|
+| `property_id` | BIGINT | PK | `real_estate_sales.id` 1:1 논리참조 |
+| `transit_base` | NUMERIC(7,4) | NOT NULL DEFAULT 0 | 교통 그룹 base(가중치 미적용) |
+| `education_base` | NUMERIC(7,4) | NOT NULL DEFAULT 0 | 학교·학원 그룹 base |
+| `commerce_base` | NUMERIC(7,4) | NOT NULL DEFAULT 0 | 상업 그룹 base |
+| `convenience_base` | NUMERIC(7,4) | NOT NULL DEFAULT 0 | 편의 그룹 base |
+| `computed_at` | TIMESTAMPTZ | NOT NULL DEFAULT now() | 배치 계산 시각 |
+
+> base 는 §5 감쇠합산(가중치 미적용). 기동 시 배치(ApplicationRunner)가 `LocationScoreCalculator` 로 산출·upsert. 0~100 정규화는 프론트 표시 단계(§5.1).
 
 #### `poi` — 상권/인프라
 | 컬럼 | 타입 | 제약 | 설명 |
 |------|------|------|------|
 | `id` | BIGINT | PK (IDENTITY) | POI 식별자 |
 | `name` | VARCHAR(200) | NOT NULL | 상호/시설명 |
-| `category` | VARCHAR(30) | NOT NULL | 세부 분류 |
-| `category_group` | VARCHAR(20) | NOT NULL | ESSENTIAL / LEISURE / ENV |
+| `category` | VARCHAR(30) | NOT NULL | 세부 분류 (SUBWAY/BUS_STOP/SCHOOL/ACADEMY/RESTAURANT/CAFE/CINEMA/MART/CONVENIENCE_STORE/HOSPITAL/PHARMACY/BANK) |
+| `category_group` | VARCHAR(20) | NOT NULL | TRANSIT / EDUCATION / COMMERCE / CONVENIENCE (§5 4분류, ENV 폐기) |
 | `address` | VARCHAR(255) | NULL | 주소 |
 | `geom` | geometry(Point, 4326) | NOT NULL | 좌표 (WGS84, 공간 인덱싱) |
 | `created_at` | TIMESTAMPTZ | NOT NULL, DEFAULT now() | 적재 시각 |
@@ -268,6 +302,7 @@ CREATE INDEX gist_region_geom ON region_summary USING GIST (geom);
 
 -- 기타 조인 및 필터 성능 최적화용 일반 인덱스
 CREATE INDEX idx_res_lawd_ym ON real_estate_sales (lawd_cd, deal_ym);
+CREATE INDEX idx_res_filter ON real_estate_sales (deal_type, property_type);  -- MAP-01 검색 필터 (PR A)
 CREATE INDEX idx_poi_category ON poi (category);
 ```
 

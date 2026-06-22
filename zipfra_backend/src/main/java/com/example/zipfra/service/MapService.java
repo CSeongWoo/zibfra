@@ -1,6 +1,10 @@
 package com.example.zipfra.service;
 
+import java.util.List;
+
+import com.example.zipfra.dto.map.MarkerFilter;
 import com.example.zipfra.dto.map.MarkerResponse;
+import com.example.zipfra.dto.map.PoiMarkerDTO;
 
 /**
  * MAP-01 지도 마커 조회 기능 명세 (팀 규칙 #5: 구현 전 인터페이스로 세부 명세).
@@ -23,8 +27,18 @@ public interface MapService {
      * @param zoom  클라이언트 줌(서버가 임계값으로 재판정)
      * @param page  0-based 페이지(생략 시 0, DETAIL 에서만 의미)
      * @param size  페이지 크기(생략 시 100, 최대 200, DETAIL 에서만 의미)
+     * @param filter 검색 필터(§8.1.1, DETAIL 에서만 적용; SUMMARY 는 무시). null 허용
      * @return DETAIL 또는 SUMMARY 응답
-     * @throws com.example.zipfra.exception.ApiException 검증 실패 시(위 판정 규칙)
+     * @throws com.example.zipfra.exception.ApiException 검증 실패 시(위 판정 규칙 + 필터 유형 불량 시 INVALID_PARAM)
      */
-    MarkerResponse getMarkers(String bbox, int zoom, Integer page, Integer size);
+    MarkerResponse getMarkers(String bbox, int zoom, Integer page, Integer size, MarkerFilter filter);
+
+    /**
+     * MAP-02 POI 오버레이 조회 (인프라 표시 토글, §8.1). 로컬 {@code poi} 테이블만 조회(외부 API 아님).
+     *
+     * @param bbox   "minLng,minLat,maxLng,maxLat" (EPSG:4326)
+     * @param groups 그룹 CSV(transit/education/commerce/convenience). null·빈값 → 빈 목록
+     * @return bbox 내 선택 그룹 POI 목록(없으면 빈 목록)
+     */
+    List<PoiMarkerDTO> getPois(String bbox, String groups);
 }

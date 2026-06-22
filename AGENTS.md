@@ -63,9 +63,10 @@ spec 파일이 없으므로 게이트는 **PR 리뷰**로 강제한다.
 | T-6 | `POST /ai/property-summary` 헤더 없음 | `401 TOKEN_MISSING` |
 | T-6 | `POST /ai/review-summary` 헤더 없음 | `401 TOKEN_MISSING` |
 | T-6 | `GET /map/markers` 헤더 없음 (Public) | `200 OK` |
-| **T-7** | pharmacy 1개, 320m → t=4.0, W=1.0, w=0.8 | contribution=**0.800** |
-| T-7 | mart 1개, 850m → t=10.625, W=1/(10.625/5)²=0.2213, w=0.6 | contribution=**0.133** |
-| T-7 | restaurant 2개 [200m,600m] → t=[2.5,7.5], W=[1.0,0.4444], Σ=1.4444, w=0.9 | contribution=**1.300** |
+| **T-7** | subway 1개, 320m → t=4.0, W=1.0 (one_is_enough) | base=**1.000** |
+| T-7 | mart 1개, 850m → t=10.625, W=1/(10.625/5)²≈0.2215 (more_is_better) | base=**0.2215**, commerce w=0.6 → 기여 0.133 |
+| T-7 | academy 2개 [200m,600m] → t=[2.5,7.5], W=[1.0,0.4444], Σ=1.4444 (more_is_better, education w=1.0) | score=**1.444** |
+| T-7 | env_penalty/서울 한정 케이스 | **폐기**(§5 재편, 4분류 전부 양수) |
 | **T-8** | LLM 타임아웃(>10초) | `200` + `summaryAvailable:false`, `summary:null` |
 | T-8 | LLM 500 오류 | `200` + `summaryAvailable:false`, `summary:null` |
 | T-8 | 리뷰 0건 (`reviewCount:0`) | `200` + `summaryAvailable:false`, `positives:null` |
@@ -210,32 +211,52 @@ spec 파일이 없으므로 게이트는 **PR 리뷰**로 강제한다.
 | SRID | 저장 EPSG:4326(`geometry`), 거리 연산 시 `::geography` 캐스팅 |
 
 ## 5. 입지 점수
+
+> **(2026-06-13, §11) 와이어프레임 4분류로 카테고리 전면 재편.** 기존 ESSENTIAL/LEISURE/ENV_PENALTY 폐기 → 교통/교육/상업/편의 4그룹. 거리 감쇠 엔진(W)·모델(one_is_enough/more_is_better)은 유지. 가중치는 **그룹 단위**(와이어프레임 페르소나 슬라이더 4개)로 변경. ENV 감점·서울 한정 로직(`isInSeoul`·`seoul_boundary`) 완전 제거. PR #12 반영.
+
 - 거리 감쇠: `t ≤ 5 → W=1`, `t > 5 → W = 1/(t/5)²`.
 
 | t | 5 | 10 | 15 | 20 |
 |---|---|----|----|----|
 | W | 1 | 1/4 | 1/9 | 1/16 |
 
-  (더 가파른 감쇠 필요 시 지수형 `W=(1/4)^((t-5)/5)`로 교체, 그러면 15분=1/16. 교체 시 §8 기록.)
+  (더 가파른 감쇠 필요 시 지수형 `W=(1/4)^((t-5)/5)`로 교체, 그러면 15분=1/16. 교체 시 §11 기록.)
 - **거리→도보시간 환산(확정)**: 도보 **80m/분(4.8km/h)** → `t = 거리(m) / 80`. 기본 반경 1,500m(≈19분), `radiusMeters` 오버라이드 범위 `[100, 3000]`.
-- **카테고리 키**: ESSENTIAL = `pharmacy`·`mart`·`bank` (one_is_enough) / LEISURE = `restaurant`·`cafe`·`cinema` (more_is_better) / TRANSIT = `subway`(지하철역, one_is_enough)·`bus_stop`(버스정류장, more_is_better) / ENV_PENALTY = `noise`(소음)·`waste`(혐오시설), 모델 `PENALTY`. 응답 `breakdown`은 `essential`/`leisure`/`transit`/`env_penalty`로 분리, `finalScore = Σ contribution`(전 카테고리, 오차 ±0.001).
-- **ENV_PENALTY(감점)**: 서울(법정동 `11*`) 좌표에서만 계산, **서울 외 좌표는 항목 자체 제외(0점 처리 금지)**. 가중치 `[0.0,1.0]`이나 감점이므로 `contribution`은 음수.
-- **필수 공급**(약국·마트·은행) = 가장 가까운 1개의 W만(One is enough, 중복 가산 금지).
-- **미식·여가**(식당·카페·영화관, 상권정보 출처) = 반경 내 전부 `Σ W`(more is better).
-- **교통**(지하철역·버스정류장, 공공데이터 출처) = 지하철은 가장 가까운 1개의 W만(one is enough), 버스정류장은 반경 내 전부 `Σ W`(more is better). **ENV_PENALTY와 달리 전국 적용**(서울 제한 없음). 교통 POI 적재 전까지 응답은 `count:0`(점수 0).
-- **환경 지도점검**(서울 한정) = 가까울수록 감점 항목. **서울 외 좌표는 0점이 아니라 항목 제외.**
-- 최종 = `Σ(카테고리 기본점수 × 사용자 가중치 0.0~1.0)`. POI 추출=PostGIS, 감쇠·합산=백엔드 메모리.
+- **카테고리 4분류**(전부 양수, 감점 없음). 응답 `breakdown`은 `transit`/`education`/`commerce`/`convenience`로 분리, `finalScore = Σ(그룹 기여)`(오차 ±0.001):
+
+| 그룹 | breakdown 키 | POI 카테고리 (모델) | 출처 |
+|------|------|------|------|
+| 🚇 교통 | `transit` | `subway`(지하철역, one_is_enough) · `bus_stop`(버스정류장, more_is_better) | 공공데이터 |
+| 🏫 학교·학원 | `education` | `school`(초·중·고, one_is_enough) · `academy`(학원, more_is_better) | 교육부 학교정보 등 |
+| 🛍 상업 | `commerce` | `restaurant`·`cafe`·`cinema`·`mart` (전부 more_is_better) | 상권정보 |
+| 🏪 편의 | `convenience` | `convenience_store`(편의점)·`hospital`(병원)·`pharmacy`(약국)·`bank`(은행) (전부 more_is_better) | 공공데이터 |
+
+- **모델**: `one_is_enough` = 가장 가까운 1개의 W만(중복 가산 금지) / `more_is_better` = 반경 내 전부 `Σ W`.
+- **전국 적용**(서울 제한 없음). POI 미적재 카테고리는 응답 `count:0`(점수 0). **신규 적재 대상**(`school`·`academy`·`hospital`·`convenience_store`·`mart`)은 별도 티켓(§9) — 적재 전까지 해당 카테고리 0점.
+- **가중치 = 그룹 단위 4개**: `weights` 키 = `transit`/`education`/`commerce`/`convenience`, 각 `[0.0, 1.0]`, 생략 시 0.0. (카테고리별 가중치 아님)
+- 최종 = `Σ(그룹 기본점수 × 그룹 가중치 0.0~1.0)`. 그룹 기본점수 = 그룹 소속 카테고리 base 의 합. POI 추출=PostGIS, 감쇠·합산=백엔드 메모리.
 
 ```
-for category in categories:
+for category in all_categories:
     pois = postgis_within(target, radius_m, category)   # ST_DWithin + ::geography
     if model[category] == "one_is_enough":
-        base = W(min(p.travel_time for p in pois)) if pois else 0
-    else:
-        base = sum(W(p.travel_time) for p in pois)
-    score[category] = base * user_weight[category]
-final = sum(score.values())
+        base[category] = W(min(p.travel_time for p in pois)) if pois else 0
+    else:  # more_is_better
+        base[category] = sum(W(p.travel_time) for p in pois)
+for group in [transit, education, commerce, convenience]:
+    group_base = sum(base[c] for c in categories_of(group))
+    contribution[group] = group_base * user_weight[group]
+final = sum(contribution.values())
 ```
+
+### 5.1 매물별 점수 사전계산 (MAP-01 연계, PR A)
+
+매물 마커/목록에 점수를 띄우려면 매물마다 점수가 미리 있어야 한다. **무거운 부분(POI 반경쿼리·감쇠합산)은 배치로 미리 계산·저장**하고, **가벼운 곱셈(그룹 base × 페르소나 가중치)은 실시간**으로 처리한다(LOC-01 좌표 클릭 계산과 별개).
+
+- **저장**: PostGIS `property_score`(매물 1:1) — `transit_base`/`education_base`/`commerce_base`/`convenience_base`(가중치 미적용 그룹 base) + `computed_at`.
+- **배치**: 각 매물 좌표로 위 §5 base 산출(`LocationScoreCalculator` 재사용) → `property_score` upsert. **기동 시 자동 실행**(ApplicationRunner; `property_score` 비어 있을 때만). 정식 심야 배치(§9)는 후속.
+- **MAP-01 응답**: DETAIL 마커에 4그룹 base 포함(`property_score` LEFT JOIN, 미계산 매물은 `0`).
+- **표시 정규화(0~100)**: base 는 객관적 감쇠합산(0~)이고 **그룹별 스케일이 크게 다르므로**(교통 ~1 vs 편의 ~57, 버스 미적재·one_is_enough 영향), **프론트 표시 단계**에서 **그룹마다 다른 계수로 0~100 정규화한 뒤 페르소나 가중평균**한다: `groupScore = clamp(0,100, group_base × GROUP_SCALE[g])`, `total = Σ(groupScore × persona_weight) / Σ(persona_weight)`. (종전 단일 `SCALE` 가중평균은 편의·상업이 지배해 페르소나(교통 강조 등)가 역효과 → 폐기.) `GROUP_SCALE` 은 적재 지역 평균 기준 튜닝값(`utils/score.js`). 백엔드는 base 까지만 제공해 페르소나 가중치(슬라이더, #6) 실시간 반영과 분리한다.
 
 ## 6. AI 요약 기능
 
@@ -447,10 +468,24 @@ final = sum(score.values())
 
 | ID | Method | URI | 인증 | DB / 캐시 | 주요 제약 |
 |----|--------|-----|------|-----------|----------|
-| MAP-01 | `GET` | `/api/v1/map/markers` | Public | PostGIS / SUMMARY: `ETag`+`max-age=300`+SWR60, DETAIL: `no-store` | `bbox=minLng,minLat,maxLng,maxLat`(4326); `zoom` 1–21 서버 재판정(§7.1); 대각>150km 가드(§7.2); `size` max 200/def 100, `page` 0-based |
-| LOC-01 | `POST` | `/api/v1/location/score` | Protected | PostGIS→메모리 / `no-store` | GET+Body 금지; `lon`[-180,180], `lat`[-90,90], `radiusMeters`[100,3000] def 1500, `weights` 각[0.0,1.0] 생략=0.0; 응답 `breakdown`=`essential`/`leisure`/`env_penalty`(§5) |
+| MAP-01 | `GET` | `/api/v1/map/markers` | Public | PostGIS / SUMMARY: `ETag`+`max-age=300`+SWR60, DETAIL: `no-store` | `bbox=minLng,minLat,maxLng,maxLat`(4326); `zoom` 1–21 서버 재판정(§7.1); 대각>150km 가드(§7.2); `size` max 200/def 100, `page` 0-based; **검색 필터(DETAIL 한정)** `dealType`·`propertyType`·`priceMin`·`priceMax` 전부 optional(§8.1.1); **DETAIL 마커에 4그룹 base 포함**(`transitBase`/`educationBase`/`commerceBase`/`convenienceBase`, 미계산 매물 `0`, §5.1) |
+| MAP-02 | `GET` | `/api/v1/map/pois` | Public | PostGIS / `no-store` | **POI 오버레이(인프라 표시 토글, DETAIL 한정)**; `bbox=minLng,minLat,maxLng,maxLat`(4326); `groups`=`transit`/`education`/`commerce`/`convenience` CSV(1개 이상); `groups`→category 변환은 `Category` enum 그룹 매핑 재사용; 응답 `[{lat,lng,category,group,name}]`; 빈 `groups`→빈 배열 |
+| LOC-01 | `POST` | `/api/v1/location/score` | Protected | PostGIS→메모리 / `no-store` | GET+Body 금지; `lon`[-180,180], `lat`[-90,90], `radiusMeters`[100,3000] def 1500, `weights`=그룹 4키(`transit`/`education`/`commerce`/`convenience`) 각[0.0,1.0] 생략=0.0; 응답 `breakdown`=`transit`/`education`/`commerce`/`convenience`(§5) |
 | PUB-01 | `GET` | `/api/v1/proxy/public-data` | Protected | PostGIS 배치 적재본 / 없음 | `type`=`REAL_ESTATE`\|`COMMERCE`; `regionCode` 10자리; `size` max 100/def 20; 전일 24:00 이전 데이터 |
 | PUB-02 | `GET` | `/api/v1/proxy/public-data/realtime` | Protected | 외부 API 직접 중계 / `no-store` | 배치 미반영 당일 단건 전용(대량 금지); `source`=`MOLIT_APT`\|`MOLIT_ROW`\|`COMMERCE`, `dealYear`, `dealMonth` 1–12, `lawd_cd` 5자리; 인증키 제거; retry 2회(1초) |
+
+#### 8.1.1 MAP-01 검색 필터 (PR A 신설 · DETAIL 한정)
+
+> 줌인(DETAIL, 개별 매물 마커)에만 적용한다. SUMMARY(줌아웃 시·군·구 집계)는 필터를 무시한다(집계 단위라 매물 속성 필터 의미 없음). 모든 필터는 optional·AND 결합, MyBatis 동적 WHERE(`<if>`)로 생략 가능. 필터 부적합 값은 `400 INVALID_PARAM`.
+
+| 파라미터 | 값 | 비고 |
+|----------|-----|------|
+| `dealType` | `SALE`\|`JEONSE`\|`WOLSE` | 거래유형(매매/전세/월세). 생략 시 전체 |
+| `propertyType` | `APT`\|`OFFICETEL`\|`ROW_HOUSE` | 매물유형(아파트/오피스텔/빌라 **3종**, 원룸 제외). 생략 시 전체 |
+| `priceMin` / `priceMax` | 정수(만원) | 가격 범위. 대상 컬럼은 `dealType`별 분기 ↓ |
+
+- **가격 필터 대상 컬럼**: `SALE`→`deal_amount`(매매가), `JEONSE`→`deposit`(보증금), `WOLSE`→`deposit`(보증금 기준; 월세 `monthly_rent`는 별도 표시만). **`dealType` 미지정 + 가격 지정** 시 `COALESCE(deal_amount, deposit)` 기준(매매가 있으면 매매가, 없으면 보증금)으로 적용 — 전월세 매물이 매매가 NULL 때문에 통째로 제외되지 않도록 한다.
+- **테스트 기준(T-10)**: `dealType=SALE`→전월세 행 제외 ✅ / `propertyType=APT`→오피스텔·빌라 제외 ✅ / `priceMin=10000&priceMax=50000`(매매)→경계 포함 ✅ / `dealType=INVALID`→`400 INVALID_PARAM` / 필터 전부 생략→기존 bbox 전체 조회(회귀) ✅ / **`dealType` 미지정 + `priceMax=80000`→전세 보증금 7.5억(deposit) 매물 포함**(COALESCE) ✅.
 
 ### 8.2 AI·인증·유저 API (Dev B 전담)
 
@@ -540,6 +575,9 @@ final = sum(score.values())
 - 상권정보: `https://www.data.go.kr/data/15083033/fileData.do` → 미식·여가 POI로 매핑
 - 교통(지하철역·버스정류장): 국가대중교통DB/국토부 역사정보 등 공공데이터 → `subway`·`bus_stop` POI로 매핑(TRANSIT 그룹, §5). **적재 미완료 상태**(틀만 선반영).
 - 적재: 심야 배치 + §7 요약 지표 동시 갱신. retry 정책·스테이징 테이블·중복 검사 명시.
+- **전국 DETAIL(`real_estate_sales`) 배치**: `POST /api/v1/admin/ingest/real-estate/nationwide?dealYmd=YYYYMM&sources=` 가 번들 CSV 244개 시군구 × **6종 소스**를 순회하며 국토부 개별 거래를 지오코딩→적재. **6종 = 아파트/오피스텔/연립다세대 × 매매/전월세**(`APT_TRADE`/`APT_RENT`/`OFFI_TRADE`/`OFFI_RENT`/`RH_TRADE`/`RH_RENT`, `sources` 비면 전부·CSV로 일부 지정). `(시군구,소스)`별 독립 트랜잭션(재실행 멱등), **단지 좌표 캐싱**(`name|jibun`)으로 지오코딩 ~절반↓. 종류별 단지명 필드 상이(`aptNm`/`offiNm`/`mhouseNm`), `estateAgentSggNm` 비면 CSV 풀주소로 보강. 매매=`dealAmount`+`SALE`, 전월세=`deposit`/`monthlyRent`+`monthlyRent>0?WOLSE:JEONSE`. 적재 후 `recompute-scores`. **단일 달 스냅샷** — 다른 달은 dealYmd 변경. **소스별 활용신청 필요**(data.go.kr, 미신청 소스는 `Forbidden`→skip).
+- **전국 POI 배치**: `POST /api/v1/admin/ingest/poi/nationwide` 가 전국 bbox 전수가 아니라 **매물이 존재하는 0.02도 격자만**(`IngestionMapper.findPropertyGridCells`) 순회하며 카카오 카테고리 검색(빈 격자 낭비 회피). `clearPoi()` 1회 후 격자×11카테고리×≤3페이지, 전역 `seen` 중복제거, 비트랜잭션(격자별 autocommit). 점수(POI 반경) 전국 정확도 확보용. 적재 후 `recompute-scores` 필수.
+- **전국 SUMMARY(`region_summary`) 배치**: 시군구 단위 `LAWD_CD` 목록은 정적 참조 데이터라 **번들 CSV(`resources/data/lawd_sgg.csv`, code·표시명·지오코딩주소)** 로 관리(외부 코드 API 의존 X). `POST /api/v1/admin/ingest/region-summary?dealYmd=YYYYMM` 가 전국 250개 시군구를 순회하며 국토부 아파트매매 API 집계(totalCount·평균·최고가) + 주소 지오코딩(중심좌표) → upsert. **강원=`51`, 전북=`52`**(특별자치도 재부여, 국토부 API 실측 기준), **군위군=대구 `27720`**. 빈 결과(totalCount 0)·지오코딩 실패 시 해당 시군구 스킵.
 
 ## 10. JWT 인증 및 Redis 활용 규약
 인증 및 인가 시스템은 JWT(JSON Web Token, HMAC-SHA256)를 사용하며, 토큰의 상태 관리 및 보안성 강화를 위해 Redis를 인메모리 저장소로 활용한다. 에이전트는 다음 설계 메커니즘을 엄격히 구현해야 한다.
@@ -568,6 +606,17 @@ final = sum(score.values())
 규칙·수식·스택이 현실과 어긋나면 편법 코드 금지. 멈추고 **이 문서를 먼저 고친다.** 변경 시 사유를 PR에 남긴다.
 
 **변경 이력**
+- (2026-06-22) **실거래가 적재 6종 일반화(§9)** — 아파트 매매 하드코딩(`deal_type='SALE'`/`property_type='APT'` 매퍼 고정) 제거. 종류(APT/OFFICETEL/ROW_HOUSE)×거래(매매/전월세) **6종 소스** 일반화: `IngestionService.ingestRealEstate(source,lawd,ymd)` + nationwide `sources` CSV 파라미터. `RealEstateRow`에 `dealType`/`propertyType`/`deposit`/`monthlyRent` 추가, 매퍼 `insertAptTrade`→`insertRealEstate`·`deleteAptTrade`→`deleteRealEstate(+dealType,propertyType)`. 종류별 단지명 필드(`aptNm`/`offiNm`/`mhouseNm`) fallback, `estateAgentSggNm` 공란 시 CSV 풀주소 보강(빌라 대응). 전월세 `monthlyRent>0?WOLSE:JEONSE`. application.yml paths 6종. **소스별 data.go.kr 활용신청 필요**(미신청 `Forbidden`→skip). PR #12(property-search).
+- (2026-06-21) **전국 POI 적재(§9)** — 전국 매물 점수 정확도 확보. `PoiIngestService.ingestPoisNationwide()` + `POST /admin/ingest/poi/nationwide` 신설. 전국 bbox 전수(빈 격자 5만+) 대신 **매물 존재 0.02도 격자만**(`findPropertyGridCells`, 강남+전국 실측 2,208개) 순회 → 카카오 호출 ~73k(일 쿼터 내). `clearPoi` 1회 후 격자별 autocommit(중간 실패 진행분 보존). 적재 후 `recompute-scores`로 전국 `property_score` 갱신. PR #12(property-search).
+- (2026-06-21) **전국 DETAIL 매물 적재(§9)** — 줌인 개별 매물 마커를 전국으로 확대. `IngestionService.ingestAptTradeNationwide(dealYmd)` + `POST /admin/ingest/real-estate/nationwide` 신설(번들 CSV 244 시군구 순회, 시군구별 독립 트랜잭션 via `ObjectProvider` self-proxy). **단지 좌표 캐싱**(`aptNm|jibun`)으로 지오코딩 호출 절감(강남 실측 unique 단지 46%). 202405 기준 37,595건 적재(지오코딩 성공률 92%). 점수(`property_score`)는 POI 적재 영역(강남권)만 유의미 — 전국 POI 적재는 후속. PR #12(property-search).
+- (2026-06-21) **전국 SUMMARY 배치 확장(§9)** — `region_summary` 적재를 서울 25구 → **전국 250개 시군구**로 확장. 종전 `IngestionServiceImpl`의 하드코딩 `SGG_NAME`(서울 25) 맵을 **번들 CSV(`resources/data/lawd_sgg.csv`)** 로드로 교체(법정동 시군구 코드는 정적 참조 데이터 → 매 배치 외부 코드 API 의존 회피). 중심 지오코딩 `"서울 "+name` 하드코딩 → CSV의 풀주소(`시도 시군구`). 강원/전북 특별자치도 재부여 코드(`51`/`52`)·군위군 대구 이전(`27720`)은 국토부 실거래가 API로 실측 확정. PR #12(property-search).
+- (2026-06-21) **표시 정규화 그룹별로 변경(§5.1)** — 실 POI 적재 후 그룹 base 스케일 불균형(교통 0.6 vs 편의 57) 확인. 종전 단일 `SCALE` 가중평균은 편의·상업이 지배해 전 매물 만점 뭉침 + 페르소나(교통 강조) 역효과 발생. **그룹별 `GROUP_SCALE` 로 0~100 정규화 후 페르소나 가중평균**으로 변경(`utils/score.js`). 강남 실데이터에서 종합점수 20~100 분포·4색 변별 정상화. 버스정류장 미적재(카카오 카테고리 미지원)는 후속. PR #12.
+- (2026-06-21) **POI/실거래가 실데이터 적재(§9) + admin 적재 엔드포인트** — 국토부 아파트 매매 OpenAPI(15126469) → 카카오 지오코딩 → PostGIS `real_estate_sales` 적재(`POST /admin/ingest/real-estate`). 카카오 카테고리 검색 → `poi` 11종 적재(`POST /admin/ingest/poi`, 버스정류장 제외). 점수 재계산(`POST /admin/recompute-scores`). 키는 `.env`(PUBLIC_DATA_SERVICE_KEY·KAKAO_REST_API_KEY). PR #12.
+- (2026-06-21) **MAP-02 POI 오버레이 엔드포인트 신설(§8.1)** — 와이어3 좌측 "인프라 표시" 토글 실제 동작. `GET /api/v1/map/pois?bbox&groups`(Public), 로컬 `poi` 테이블 조회(외부 API 아님). `groups`(transit/education/commerce/convenience)→category 변환은 기존 `Category` enum 그룹 매핑 재사용. DETAIL 줌에서만 프론트가 켜진 그룹 조회→지도에 그룹색 점. PR #12(property-search).
+- (2026-06-17) **MAP-01 가격 필터: `dealType` 미지정 시 `COALESCE(deal_amount, deposit)` 기준(§8.1.1)** — 종전 "미지정=매매가(deal_amount) 기준"은 전세·월세 매물(매매가 NULL)을 가격 범위에서 통째로 제외해 와이어3 지도검색에서 "전세 7.5억이 사라지는" 직관 위반 발생. 매매가 있으면 매매가, 없으면 보증금으로 비교하도록 변경. T-10에 검증 케이스 추가. 프론트 가격 UI는 듀얼 슬라이더→최소/최대 입력칸으로 교체(정밀·명확). PR #12(property-search).
+- (2026-06-15) **매물별 점수 사전계산 신설(§5.1)** — PostGIS `property_score`(매물 1:1, 4그룹 base) + 기동 시 배치(ApplicationRunner, `LocationScoreCalculator` 재사용). MAP-01 DETAIL 응답에 4그룹 base 포함(LEFT JOIN, 미계산 0). 0~100 정규화는 프론트 표시 단계(페르소나 가중치 실시간 반영과 분리). 정식 심야 배치(§9)·페르소나 슬라이더(#6)는 후속. PR #12(property-search).
+- (2026-06-15) **MAP-01 검색 필터 신설(§8.1.1) + 실거래가 스키마 확장** — 와이어프레임 3(지도 검색) PR A 착수. `real_estate_sales`에 `deal_type`(SALE/JEONSE/WOLSE)·`property_type`(APT/OFFICETEL/ROW_HOUSE, 원룸 제외 3종)·`deposit`·`monthly_rent`·`build_year` 추가, `deal_amount` NULL 허용(전월세). MAP-01 DETAIL에 `dealType`·`propertyType`·`priceMin`·`priceMax` 필터 추가(SUMMARY 미적용). 매물별 점수 사전계산(`property_score` 신규 테이블)은 동 PR 후속 단계. 국토부 실거래가 공공데이터 실제 필드 기준 설계(재작업 방지). PR #12(property-search).
+- (2026-06-13) **입지 점수(§5) 카테고리 전면 재편** — 와이어프레임 4분류(교통/학교·학원/상업/편의)로 갈아엎음. 기존 ESSENTIAL/LEISURE/ENV_PENALTY 폐기, ENV 감점·서울 한정(`isInSeoul`·`seoul_boundary`) 로직 제거. 응답 `breakdown` 키 = `transit`/`education`/`commerce`/`convenience`, **가중치는 그룹 단위 4개**로 변경. 거리 감쇠 W공식·모델(one_is_enough/more_is_better)은 유지. 신규 POI(`school`·`academy`·`hospital`·`convenience_store`·`mart`) 적재는 별도 티켓(§9, 적재 전 `count:0`). 와이어프레임/페르소나 UI 정합 목적. PR #12.
 - (2026-06-11) 입지 점수(§5)에 TRANSIT 그룹 신설 — `subway`(지하철역, one_is_enough)·`bus_stop`(버스정류장, more_is_better), 전국 적용. 응답 `breakdown`에 `transit` 키 추가(§5). 교통 POI 데이터 적재는 미완료(틀만 선반영, 적재 전 `count:0`). PR #6 리뷰(CSeongWoo) 반영.
 - (2026-06-08) 프론트엔드 최초 랜딩 시 불필요한 토큰 재발급(refresh) 호출 제거 및 보호 구역(requiresAuth) 기반 세션 복구/리다이렉션 무한 루프 방지 로직 구현.
 - (2026-06-08) Phase 2 회원 인증(AUTH) 및 사용자 기능 풀스택 구현 완료 (MyBatis/MySQL/Redis 연동 백엔드 API 및 테스트 패스 + Vue 3/Pinia/Axios 자동 토큰 갱신(RTR) 및 Glassmorphism UI 프론트엔드).

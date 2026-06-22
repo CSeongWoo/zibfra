@@ -47,18 +47,33 @@ public enum ErrorCode {
     /** kangwon — weights 값이 [0.0,1.0] 범위를 벗어남 */
     WEIGHT_OUT_OF_RANGE(HttpStatus.BAD_REQUEST, "weights 값은 0.0~1.0 범위여야 합니다."),
 
+    // ==== [PUB-02 공공데이터 실시간 프록시 - kangwon] §8.3 ====
+    /** kangwon — 외부 API 응답 > 5초 */
+    UPSTREAM_TIMEOUT(HttpStatus.GATEWAY_TIMEOUT, "외부 API 응답이 지연되었습니다."),
+    /** kangwon — 외부 API HTTP 429 (Retry-After: 60) */
+    UPSTREAM_RATE_LIMIT(HttpStatus.SERVICE_UNAVAILABLE, "외부 API 호출 한도를 초과했습니다.", 60),
+    /** kangwon — 외부 API HTTP 4xx */
+    UPSTREAM_CLIENT_ERROR(HttpStatus.BAD_GATEWAY, "외부 API 가 오류를 반환했습니다."),
+
     // ==== [공통] ====
     INVALID_PARAM(HttpStatus.BAD_REQUEST, "잘못된 요청 파라미터입니다."),
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.");
 
     private final HttpStatus status;
     private final String message;
+    private final Integer retryAfterSeconds; // null 이면 Retry-After 헤더 미부착
 
     ErrorCode(HttpStatus status, String message) {
+        this(status, message, null);
+    }
+
+    ErrorCode(HttpStatus status, String message, Integer retryAfterSeconds) {
         this.status = status;
         this.message = message;
+        this.retryAfterSeconds = retryAfterSeconds;
     }
 
     public HttpStatus getStatus() { return status; }
     public String getMessage() { return message; }
+    public Integer getRetryAfterSeconds() { return retryAfterSeconds; }
 }

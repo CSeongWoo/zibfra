@@ -1,6 +1,8 @@
 package com.example.zipfra.mapper.postgis;
 
 import com.example.zipfra.dto.location.PoiDistanceDTO;
+import com.example.zipfra.dto.map.Bbox;
+import com.example.zipfra.dto.map.PoiMarkerDTO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -13,11 +15,12 @@ import java.util.List;
 @Mapper
 public interface PoiMapper {
 
-    /** 좌표가 서울(법정동 11*) 경계 내인지 — ENV_PENALTY 산출 게이트. */
-    boolean isInSeoul(@Param("lon") double lon, @Param("lat") double lat);
-
     /** 반경(m) 내 POI 를 카테고리·거리(m)와 함께 조회. */
     List<PoiDistanceDTO> findWithin(@Param("lon") double lon,
                                     @Param("lat") double lat,
                                     @Param("radiusMeters") int radiusMeters);
+
+    /** MAP-02: bbox 내 + 카테고리(대문자 enum 이름) 매칭 POI 조회(오버레이용). */
+    List<PoiMarkerDTO> findInBbox(@Param("bbox") Bbox bbox,
+                                  @Param("categories") List<String> categories);
 }

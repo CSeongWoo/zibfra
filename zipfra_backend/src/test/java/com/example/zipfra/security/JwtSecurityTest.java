@@ -128,7 +128,7 @@ public class JwtSecurityTest {
 
     @Test
     public void T_6_4_Public_Markers_Without_Token_Should_Return_200_OK() throws Exception {
-        org.mockito.BDDMockito.given(mapService.getMarkers(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+        org.mockito.BDDMockito.given(mapService.getMarkers(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
                 .willReturn(com.example.zipfra.dto.map.MarkerResponse.summary(java.util.Collections.emptyList(), false));
 
         mockMvc.perform(get("/api/v1/map/markers")

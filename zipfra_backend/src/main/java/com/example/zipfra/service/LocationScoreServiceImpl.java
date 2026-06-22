@@ -52,11 +52,10 @@ public class LocationScoreServiceImpl implements LocationScoreService {
         int radiusMeters = resolveRadius(request.getRadiusMeters());
         validateWeights(request.weightsOrEmpty());
 
-        boolean inSeoul = poiMapper.isInSeoul(lon, lat);
         List<PoiDistanceDTO> pois = poiMapper.findWithin(lon, lat, radiusMeters);
 
         LocationScoreCalculator.CalcResult result =
-                calculator.calculate(pois, request.weightsOrEmpty(), inSeoul);
+                calculator.calculate(pois, request.weightsOrEmpty());
 
         return new ScoreResponse(lon, lat, radiusMeters, result.finalScore(), result.breakdown());
     }
