@@ -87,7 +87,7 @@ spec 파일이 없으므로 게이트는 **PR 리뷰**로 강제한다.
 - DB: MySQL 8.x(쓰기·인증) / PostgreSQL 15·PostGIS 3.x(읽기·공간 분석) / **Redis**(토큰 상태 관리 — RT 저장 + AT Blacklist, §10).
 - 프론트: Vue 3 Composition + Pinia + Axios, 카카오 맵.
 - 멀티 데이터소스: MyBatis `SqlSessionFactory`/`DataSource`를 MySQL용·PostGIS용으로 분리하고 트랜잭션 매니저를 라우팅.
-- **AI**: 외부 LLM API 연동(§6). HTTP 클라이언트(`RestTemplate`)로 직접 호출. 별도 AI 프레임워크 의존성 추가 시 설계안에서 사유 명시 후 승인 필요.
+- **AI**: **Spring AI** 프레임워크 기반(§6). `ChatClient` + `@Tool`(함수 호출) + `Resource` 인터페이스로 LLM ↔ DB 연동. HTTP 클라이언트(`RestTemplate`) 직접 LLM 호출 **금지**. Spring AI 모듈 추가 시 설계안에서 사유 명시 후 승인 필요.
 
 **확정 버전 (build.gradle)**
 
@@ -98,9 +98,10 @@ spec 파일이 없으므로 게이트는 **PR 리뷰**로 강제한다.
 | 공간 쿼리 | MyBatis Native SQL (JPA/Querydsl 공간 연산 금지) |
 | 보안 | Spring Security + JJWT 0.11.5 |
 | API 문서 | springdoc-openapi 3.0.2 (Swagger UI) |
-| MySQL | 8.x (사용자·인증·쓰기) |
+| MySQL | 8.x (사용자·인증·AI 요약 캐시·쓰기) |
 | PostGIS | PostgreSQL 15.x / PostGIS 3.x (공간·집계 읽기) |
 | Redis | 토큰 상태 관리 — RT 저장(`rt:{userId}`) + AT Blacklist(`bl:{accessToken}`), §10 |
+| **AI** | **Spring AI** (spring-ai-openai-spring-boot-starter) — `ChatClient`, `@Tool`, `Resource`; 모델 `gpt-4o-mini` |
 
 **멀티 데이터소스 Bean 구성** (둘 다 read-only, `propagation=SUPPORTS`; TransactionManager 동시 오픈 금지 — 서비스 메서드당 하나)
 
@@ -260,12 +261,14 @@ final = sum(contribution.values())
 
 ## 6. AI 요약 기능
 
+> **(2026-06-22, §11) Spring AI Tool/Resource/Planner 구조로 전면 재설계.** 기존 `RestTemplate` 직접 LLM 호출 방식 폐기. `mysql_ai_summaries` Read-Through 캐시 도입, LLM 직접 Tool 호출 아키텍처 확정.
+
 ### 6.1 기능 목록
 
-| 기능 | 입력 | 출력 | 트리거 |
-|------|------|------|--------|
-| **부동산·인프라 요약** | 매물 기본 정보 + 입지 점수 breakdown | 자연어 요약문 (3~5문장) | 매물 상세 페이지 진입 시 |
-| **리뷰 요약** | 해당 건물·지역의 리뷰 목록 (최대 50건) | 긍정·부정 핵심 테마 + 요약문 | 리뷰 탭 최초 로드 시 |
+| 기능 | ID | 입력 | 출력 | 트리거 |
+|------|-----|------|------|--------|
+| **부동산·인프라 요약** | AI-01 | `propertyId` | 자연어 요약문 (3~5문장) | 매물 상세 페이지 진입 시 |
+| **리뷰 요약** | AI-02 | `targetType` + `targetId` | 긍정·부정 핵심 테마 + 요약문 | 리뷰 탭 최초 로드 시 |
 
 ### 6.2 공통 아키텍처 원칙
 - **백엔드 프록시 필수**: Vue(클라이언트)에서 LLM API를 직접 호출 금지(API 키 유출·CORS). 모든 AI 호출은 `POST /api/v1/ai/**` 백엔드 엔드포인트를 경유한다.
@@ -273,11 +276,134 @@ final = sum(contribution.values())
 - **LLM 선택**: AI-01·AI-02 모두 **`gpt-4o-mini`**(확정). 모델 교체는 §11 Living Document 절차에 따라 이 문서를 먼저 수정.
 - **스트리밍**: 초기 구현은 단순 요청-응답(non-streaming). 응답 지연 허용치(p95 < 10초) 초과 시 Server-Sent Events(SSE) 스트리밍으로 전환 가능하나, 전환 전 별도 설계안 승인 필요.
 - **Fallback**: LLM API 타임아웃(> 10초)·오류 시 `null`이 아닌 **빈 요약 객체** + `summaryAvailable: false` 를 반환한다. 프론트는 이 필드로 요약 UI를 숨긴다.
+- **즉시 LLM 호출 금지**: 요청이 들어오면 반드시 §6.3의 캐시 체크를 먼저 수행한다. `mysql_ai_summaries`를 조회하지 않고 LLM을 호출하는 코드는 PR 리뷰에서 **즉시 반려**.
 
-### 6.3 기능 A — 부동산·인프라 요약
+### 6.3 DB 캐시 계층 — `mysql_ai_summaries` (Read-Through)
+
+> **GIGO 방지 원칙**: 캐시 체크를 건너뛰면 동일 매물에 대해 LLM이 매 요청마다 호출되어 쿼터 폭발 및 응답 불일치가 발생한다. 서비스 레이어의 첫 줄은 반드시 캐시 조회여야 한다.
+
+**테이블 스키마 (`mysql_ai_summaries`)**
+
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| `id` | BIGINT PK AUTO_INCREMENT | 내부 식별자 |
+| `summary_type` | VARCHAR(20) | `PROPERTY` \| `REVIEW` |
+| `target_id` | BIGINT | `propertyId` (PROPERTY) 또는 `targetId` (REVIEW) |
+| `target_type` | VARCHAR(20) | PROPERTY 시 `null`, REVIEW 시 `BUILDING`\|`AREA` |
+| `summary_available` | TINYINT(1) | 유효 요약 존재 여부 |
+| `summary_json` | JSON | 전체 응답 페이로드(직렬화). LLM 불가 시 `null` |
+| `created_at` | DATETIME | 최초 생성 시각 |
+| `expires_at` | DATETIME | 만료 시각 (`created_at + 24h`) |
+
+**캐시 룩업 로직 (의사코드)**
+
+```
+function lookupCache(summaryType, targetId, targetType):
+    row = SELECT * FROM mysql_ai_summaries
+            WHERE summary_type=summaryType AND target_id=targetId
+              AND (target_type=targetType OR target_type IS NULL)
+            LIMIT 1
+
+    if row EXISTS AND row.expires_at > NOW():
+        return deserialize(row.summary_json)   // 캐시 HIT → LLM 미호출
+    else:
+        return CACHE_MISS
+
+function upsertCache(summaryType, targetId, targetType, payload):
+    INSERT INTO mysql_ai_summaries (...) VALUES (...)
+    ON DUPLICATE KEY UPDATE
+        summary_json = VALUES(summary_json),
+        summary_available = VALUES(summary_available),
+        created_at = NOW(),
+        expires_at = DATE_ADD(NOW(), INTERVAL 24 HOUR)
+```
+
+**캐시 무효화 조건**
+- `expires_at` 경과 (24h TTL 만료)
+- 해당 `targetId`에 리뷰 신규 작성 또는 삭제 이벤트 발생 시(REV-02·REV-04 후 `AiSummaryMapper.invalidate(targetId)` 호출)
+
+### 6.4 Spring AI 컴포넌트 구조
+
+> LLM이 데이터를 수동으로 주입받는 구조(종전)를 폐기하고, LLM이 **`@Tool`을 직접 실행**하여 DB에서 데이터를 가져오는 **Function Calling 구조**로 명세한다.
+
+#### 6.4.1 Tool 정의
+
+| Tool ID | 빈 이름 | 호출 시점 | DB / Mapper |
+|---------|---------|----------|-------------|
+| `getPropertyDetail` | `PropertyDetailTool` | AI-01 Planner가 매물 상세 필요 시 | MySQL `PropertyMapper` (건물명·거래금액·면적·층·법정동) |
+| `getLocationBreakdown` | `LocationBreakdownTool` | AI-01 Planner가 입지 점수 필요 시 | PostGIS `PoiMapper` (§5 알고리즘, `property_score` LEFT JOIN) |
+| `getReviews` | `ReviewsTool` | AI-02 Planner가 리뷰 목록 필요 시 | MySQL `ReviewMapper` (`mysql_reviews`, 마스킹 완료 평문 반환) |
+
+**`getPropertyDetail` 인터페이스 계약**
+- 입력 파라미터: `propertyId: Long`
+- 출력(Resource): `{ buildingName, dealAmount, area, floor, beopjungdong, dealType, propertyType, dealDate }`
+- 오류 시: `PROPERTY_NOT_FOUND` 예외 → Planner가 수신 후 `summaryAvailable: false` Fallback
+
+**`getLocationBreakdown` 인터페이스 계약**
+- 입력 파라미터: `propertyId: Long, radiusMeters: int (default 1500)`
+- 출력(Resource): `{ transit: { score, pois:[...] }, education: {...}, commerce: {...}, convenience: {...} }` (§5 breakdown 구조)
+- PostGIS `property_score` 존재 시 우선 사용, 없으면 온디맨드 계산 후 upsert
+
+**`getReviews` 인터페이스 계약**
+- 입력 파라미터: `targetType: String, targetId: Long, maxReviews: int (default 30)`
+- 출력(Resource): PII 마스킹(`[REDACTED]`) 완료된 리뷰 텍스트 목록 + `reviewCount`
+- 인젝션 방지: 각 리뷰 앞뒤에 구분자 `---USER REVIEW START---` / `---USER REVIEW END---` 삽입 후 Resource에 포함
+- 0건이면 `reviewCount: 0`을 Resource로 반환 → Planner가 `summaryAvailable: false` Fallback 결정
+
+#### 6.4.2 Planner 구성
+
+| Planner | ChatClient 구성 | Tool 조합 | 출력 |
+|---------|----------------|-----------|------|
+| `PropertySummaryPlanner` | System 프롬프트: 부동산 객관 요약·가드레일 | `getPropertyDetail` + `getLocationBreakdown` | 자연어 요약문 (3~5문장) |
+| `ReviewSummaryPlanner` | System 프롬프트: JSON 강제 출력·구분자 인식 | `getReviews` | JSON `{ positives:[...], negatives:[...], summary }` |
+
+**공통 프롬프트 원칙**
+- **System 역할**: "당신은 한국 부동산 정보를 간결하고 객관적으로 요약하는 AI 어시스턴트입니다. 가격 예측·투자 추천·법률 조언은 절대 하지 않습니다."
+- **토큰 한도**: AI-01 입력 max 1,500 / 출력 max 300 tokens. AI-02 입력 max 1,500 / 출력 max 400 tokens.
+- **JSON 강제(AI-02)**: structured output 또는 few-shot 예시로 `{ positives, negatives, summary }` 형태 강제.
+
+### 6.5 처리 흐름 (AI-01·AI-02 공통)
+
+```
+[클라이언트]
+  │ POST /api/v1/ai/property-summary  { propertyId, includeScore }
+  ▼
+[AiController]  ← JWT Protected
+  │ AiService.generatePropertySummary(propertyId)
+  ▼
+[AiService]
+  ①  cache = AiSummaryMapper.findValid(PROPERTY, propertyId, null)
+      if cache != null:
+          return deserialize(cache.summary_json)       // ← 캐시 HIT, LLM 미호출
+  ②  quotaGuard.check(userId)                         // 일일 쿼터 초과 → 429
+  ③  PropertySummaryPlanner.call(propertyId)           // Spring AI ChatClient 실행
+      │
+      │  LLM → getPropertyDetail(propertyId)           // Tool 호출
+      │       → [MySQL PropertyMapper 실행]
+      │       → Resource 반환 → LLM 수신
+      │
+      │  LLM → getLocationBreakdown(propertyId, 1500)  // Tool 호출 (includeScore=true)
+      │       → [PostGIS PoiMapper / property_score 실행]
+      │       → Resource 반환 → LLM 수신
+      │
+      │  LLM → 자연어 요약 생성 (최종 응답)
+      ▼
+  ④  AiSummaryMapper.upsert(PROPERTY, propertyId, null, payload, expires_at=+24h)
+  ⑤  return payload                                    // 프론트 반환
+
+[예외 분기]
+  LLM 타임아웃(>10s) / LLM 5xx  →  Fallback 반환 { summaryAvailable:false }
+                                   (DB upsert 생략 — 캐시에 실패 결과 저장 금지)
+  PROPERTY_NOT_FOUND Tool 오류   →  404 반환
+  AI_QUOTA_EXCEEDED              →  429 반환
+```
+
+> AI-02(`/ai/review-summary`)는 ③에서 `ReviewSummaryPlanner.call(targetType, targetId, maxReviews)`를 호출하고, `getReviews` Tool이 `mysql_reviews`를 조회한다. 나머지 흐름(①②④⑤·예외)은 동일.
+
+### 6.6 기능 A — 부동산·인프라 요약 (AI-01)
 
 **엔드포인트**: `POST /api/v1/ai/property-summary`  
-**DB**: MySQL(매물 기본정보 읽기) + PostGIS(입지 점수 데이터)  
+**DB**: MySQL `mysql_ai_summaries`(캐시 R/W) + MySQL `PropertyMapper`(Tool) + PostGIS `PoiMapper`(Tool)  
 **인증**: Protected
 
 **입력 계약**
@@ -288,19 +414,7 @@ final = sum(contribution.values())
 }
 ```
 
-**처리 흐름**
-1. `propertyId`로 MySQL에서 매물 정보(건물명, 거래금액, 면적, 층, 법정동) 조회.
-2. `includeScore=true`이면 PostGIS에서 입지 점수 breakdown을 동기 계산(§5 알고리즘).
-3. 아래 **프롬프트 템플릿**에 데이터를 주입해 LLM 호출.
-4. LLM 응답(요약문)을 응답 body에 담아 반환.
-
-**프롬프트 설계 원칙**
-- **시스템 역할(System)**: "당신은 한국 부동산 정보를 간결하고 객관적으로 요약하는 AI 어시스턴트입니다."
-- **유저 턴(User)**: 매물 구조화 데이터를 JSON 형태로 제공 후 "위 정보를 바탕으로 이 매물의 특징과 주변 인프라 현황을 3~5문장으로 요약하세요." 요청.
-- **가드레일**: 가격 예측·투자 추천·법률 조언 금지 문구를 System 프롬프트에 명시.
-- **토큰 한도**: 입력 max 1,500 tokens, 출력 max 300 tokens.
-
-**출력 계약**
+**출력 계약 (캐시 HIT 또는 신규 생성)**
 ```json
 {
   "propertyId": 10023,
@@ -310,15 +424,15 @@ final = sum(contribution.values())
 }
 ```
 
-**Fallback 응답**
+**Fallback 응답 (LLM 오류·타임아웃)**
 ```json
 { "propertyId": 10023, "summaryAvailable": false, "summary": null, "generatedAt": null }
 ```
 
-### 6.4 기능 B — 리뷰 요약
+### 6.7 기능 B — 리뷰 요약 (AI-02)
 
 **엔드포인트**: `POST /api/v1/ai/review-summary`  
-**DB**: MySQL(리뷰 목록 읽기)  
+**DB**: MySQL `mysql_ai_summaries`(캐시 R/W) + MySQL `mysql_reviews`(Tool via `ReviewsTool`)  
 **인증**: Protected
 
 **입력 계약**
@@ -331,19 +445,9 @@ final = sum(contribution.values())
 ```
 
 - `targetType`: `BUILDING`(건물) | `AREA`(법정동 단위)
-- `maxReviews`: 1~50 (default 30). LLM 토큰 초과 방지용 상한.
+- `maxReviews`: 1~50 (default 30). LLM 토큰 초과 방지용 상한. **51 이상 → `400 INVALID_PARAM`**.
 
-**처리 흐름**
-1. MySQL에서 해당 건물/지역 리뷰를 최신순 `maxReviews`건 조회.
-2. 리뷰 텍스트를 목록으로 합산, 토큰 추정(평균 한글 1자 ≈ 2~3 tokens). **총 입력 1,500 tokens 초과 시 최신 리뷰부터 잘라낸다.**
-3. LLM 호출 → 긍정·부정 테마 + 요약문 반환.
-
-**프롬프트 설계 원칙**
-- 리뷰를 번호 목록으로 제공 후 "긍정적 특징 3가지, 부정적 특징 3가지, 전체 요약 2문장을 JSON으로 반환하세요." 요청.
-- LLM 출력 포맷을 **JSON으로 강제** (structured output 또는 few-shot 예시 제공).
-- 개인 식별 정보(닉네임, 연락처 등) 리뷰에 포함된 경우 프롬프트에 전달 전 마스킹.
-- 리뷰 텍스트 앞뒤 구분자 `---USER REVIEW START---` 삽입(인젝션 방지, §6.5).
-- **토큰 한도**: 입력 max 1,500 tokens(초과 시 최신 리뷰부터 절단), 출력 max 400 tokens.
+**캐시 키**: `(REVIEW, targetId, targetType)` 조합으로 `mysql_ai_summaries` 단건 조회.
 
 **출력 계약**
 ```json
@@ -359,20 +463,22 @@ final = sum(contribution.values())
 }
 ```
 
-### 6.5 비용·남용 방지
-- **토큰 쿼터**: 사용자 1인당 일일 AI 엔드포인트 호출 횟수 제한. 초과 시 `429 Too Many Requests` + `Retry-After`. 상한 수치는 LLM 단가 확정 후 설계안에서 결정.
-- **캐싱**: 동일 `propertyId`·`targetId`에 대한 요약 결과를 MySQL `ai_summaries` 테이블에 저장하고 **24시간 TTL** 내 재사용. 재생성은 TTL 만료 또는 새 리뷰 추가 이벤트 시.
-- **PII 마스킹**: 리뷰 요약 시 정규식으로 전화번호·이메일 패턴을 `[REDACTED]`로 치환 후 LLM에 전달.
-- **프롬프트 인젝션 방지**: 사용자 입력(리뷰 텍스트) 앞뒤에 구분자(`---USER REVIEW START---`)를 삽입해 시스템 프롬프트 탈출 시도를 제한.
+### 6.8 비용·남용 방지
+- **토큰 쿼터**: 사용자 1인당 일일 AI 엔드포인트 호출 횟수 제한. 초과 시 `429 Too Many Requests` + `Retry-After: 86400`. 상한 수치는 LLM 단가 확정 후 설계안에서 결정.
+- **캐시 24h TTL**: §6.3의 `mysql_ai_summaries.expires_at` 기준. 캐시 HIT 시 LLM 미호출.
+- **리뷰 이벤트 무효화**: REV-02(작성)·REV-04(삭제) 직후 `AiSummaryMapper.invalidate(targetId)` 호출하여 해당 `target_id`의 `expires_at`을 `NOW()`로 업데이트(즉시 만료).
+- **PII 마스킹**: `ReviewsTool` 내부에서 정규식으로 전화번호·이메일 패턴을 `[REDACTED]`로 치환 후 Resource에 포함. LLM에는 마스킹된 텍스트만 전달.
+- **프롬프트 인젝션 방지**: `ReviewsTool`이 리뷰 텍스트 앞뒤에 구분자(`---USER REVIEW START---` / `---USER REVIEW END---`)를 삽입해 반환. 시스템 프롬프트 탈출 시도를 제한.
+- **토큰 절단**: `ReviewsTool`이 리뷰 목록의 총 토큰 추정치(한글 1자 ≈ 2~3 tokens)가 1,500 초과 시, 최신 리뷰부터 역순으로 절단하여 반환.
 
-### 6.6 에러 계약
+### 6.9 에러 계약
 
 | 상황 | HTTP | `error` |
 |------|------|--------|
 | LLM API 타임아웃 (> 10초) | 200 | — (Fallback: `summaryAvailable: false`) |
 | LLM API 오류 (5xx) | 200 | — (Fallback: `summaryAvailable: false`) |
 | 리뷰 없음 (0건) | 200 | `reviewCount: 0`, `summaryAvailable: false` |
-| 매물 없음 (AI-01) | 404 | `PROPERTY_NOT_FOUND` |
+| 매물 없음 (AI-01 `getPropertyDetail` Tool 오류) | 404 | `PROPERTY_NOT_FOUND` |
 | 잘못된 파라미터 (`maxReviews>50`·`targetType` 불량 등) | 400 | `INVALID_PARAM` |
 | 일일 쿼터 초과 | 429 | `AI_QUOTA_EXCEEDED` (+ `Retry-After: 86400`) |
 | JWT 누락/만료 | 401 | `TOKEN_MISSING` / `TOKEN_EXPIRED` |
@@ -380,6 +486,8 @@ final = sum(contribution.values())
 | Blacklist 토큰(로그아웃 후 재사용) | 401 | `TOKEN_BLACKLISTED` |
 
 > **설계 이유**: LLM 오류를 5xx로 노출하지 않고 Fallback으로 처리한다. AI 요약은 핵심 기능이 아니라 **보조 기능**이므로, AI가 죽어도 나머지 서비스가 정상 동작해야 한다.
+
+> **디버깅 포인트(GIGO 방지)**: Tool이 반환하는 Resource 품질이 요약 품질을 결정한다. `getPropertyDetail`이 거래 금액 `null`을 그대로 반환하거나, `getReviews`가 마스킹 전 텍스트를 포함하면 LLM 출력이 오염된다. Tool 단위 단위 테스트(Mock DB)를 구현 필수.
 
 ## 7. 지도 렌더링
 - 줌인 = CSR 마커/클러스터러(Vue `ref`/`reactive`). 줌아웃 = 서버 집계(사전 요약 테이블 우선, 없으면 `ST_SnapToGrid` 격자; `ST_ClusterKMeans`는 대량 시 무거움).
@@ -492,8 +600,8 @@ final = sum(contribution.values())
 
 | ID | Method | URI | 인증 | DB / 캐시 | 주요 제약 |
 |----|--------|-----|------|-----------|----------|
-| AI-01 | `POST` | `/api/v1/ai/property-summary` | Protected | MySQL+PostGIS / DB 캐시 24h | `propertyId`(req), `includeScore`(def true); `gpt-4o-mini`; 입력≤1500/출력≤300; Fallback(§6.6) |
-| AI-02 | `POST` | `/api/v1/ai/review-summary` | Protected | MySQL / DB 캐시 24h(새 리뷰 무효화) | `targetType`=`BUILDING`\|`AREA`, `targetId`, `maxReviews`[1,50] def 30; `gpt-4o-mini`; 입력≤1500/출력≤400; PII 마스킹+인젝션 구분자; Fallback |
+| AI-01 | `POST` | `/api/v1/ai/property-summary` | Protected | MySQL `mysql_ai_summaries`(캐시 R/W) + MySQL `PropertyMapper`(Tool) + PostGIS `PoiMapper`(Tool) / DB 캐시 24h(`expires_at`) | `propertyId`(req), `includeScore`(def true); Spring AI `PropertySummaryPlanner`; `gpt-4o-mini`; 입력≤1500/출력≤300; 캐시 HIT 시 LLM 미호출; Fallback(§6.9) |
+| AI-02 | `POST` | `/api/v1/ai/review-summary` | Protected | MySQL `mysql_ai_summaries`(캐시 R/W) + MySQL `mysql_reviews`(Tool) / DB 캐시 24h(`expires_at`); 새 리뷰 이벤트 즉시 무효화 | `targetType`=`BUILDING`\|`AREA`, `targetId`, `maxReviews`[1,50] def 30; Spring AI `ReviewSummaryPlanner`; `gpt-4o-mini`; 입력≤1500/출력≤400; PII 마스킹+인젝션 구분자; Fallback(§6.9) |
 | AUTH-01 | `POST` | `/api/v1/auth/signup` | Public | MySQL(쓰기) / 없음 | `email`(RFC5322,≤255), `password`(≥8·영문+숫자+특수 각1), `nickname`(2~20); BCrypt 해시; `201` |
 | AUTH-02 | `POST` | `/api/v1/auth/login` | Public | MySQL + Redis(RT) / 없음 | AT 30분+RT 14일 발급, Redis `rt:{userId}` SET; 자격 실패는 사용자 열거 방지 동일 에러(`401 TOKEN_INVALID`) |
 | AUTH-03 | `POST` | `/api/v1/auth/refresh` | Public(RT 검증) | Redis / 없음 | RTR(§10.2): 구 RT 삭제+신규 AT/RT 발급; 불일치=탈취의심 즉시 삭제 |
@@ -559,9 +667,13 @@ final = sum(contribution.values())
 | LOC-01 | PostGIS | `postgis.PoiMapper` | `ST_DWithin(geom::geography,…,radiusM)` |
 | PUB-01 | PostGIS | `postgis.PublicDataMapper` | 배치 적재본 직접 조회 |
 | PUB-02 | 외부 API | — | HTTP 프록시 (DB 없음) |
-| AI-01 | MySQL+PostGIS | `PropertyMapper`+`PoiMapper` | 매물(MySQL)+점수(PostGIS) |
-| AI-02 | MySQL | `ReviewMapper` | 리뷰 최신순 조회 |
-| AI 캐시 R/W | MySQL | `AiSummaryMapper` | `ai_summaries` 단건 |
+| AI-01 (캐시 체크) | MySQL | `mysql.AiSummaryMapper` | `mysql_ai_summaries` 캐시 HIT 여부 확인 (최우선) |
+| AI-01 (`PropertyDetailTool`) | MySQL | `mysql.PropertyMapper` | 매물 상세 조회 (캐시 MISS 시 LLM Tool 호출) |
+| AI-01 (`LocationBreakdownTool`) | PostGIS | `postgis.PoiMapper` | 입지 점수 breakdown (캐시 MISS 시 LLM Tool 호출) |
+| AI-01 (캐시 저장) | MySQL | `mysql.AiSummaryMapper` | `mysql_ai_summaries` Upsert (`expires_at = NOW()+24h`) |
+| AI-02 (캐시 체크) | MySQL | `mysql.AiSummaryMapper` | `mysql_ai_summaries` 캐시 HIT 여부 확인 (최우선) |
+| AI-02 (`ReviewsTool`) | MySQL | `mysql.ReviewMapper` | `mysql_reviews` 최신순 조회 + PII 마스킹 (캐시 MISS 시) |
+| AI-02 (캐시 저장) | MySQL | `mysql.AiSummaryMapper` | `mysql_ai_summaries` Upsert (`expires_at = NOW()+24h`) |
 | AUTH-01/02 | MySQL | `mysql.UserMapper` | 이메일/PK 조회·삽입 |
 | AUTH-02/03 (RT) | Redis | — | `rt:{userId}` SET + TTL |
 | AUTH-04 (로그아웃) | Redis | — | `rt:{userId}` DEL, `bl:{at}` SET + TTL |
@@ -609,6 +721,7 @@ final = sum(contribution.values())
 **변경 이력**
 - (2026-06-22) **MAP-03 단지 검색 신설(§8.1)** — 검색창이 카카오 `keywordSearch`라 편의점·다이소 등 일반 POI가 떠 의도(지역/매물)와 불일치. 검색을 2원화: **지역=카카오 `addressSearch`**(주소 전용, POI 배제, 프론트), **단지=신규 `GET /api/v1/map/search`**(우리 `real_estate_sales.building_name ILIKE`, 단지 단위 `GROUP BY building_name,lawd_cd` 집계 — 대표 좌표 `ST_Centroid`·`dealCount`·면적범위·준공년, dealCount desc). `q` 2자 미만=빈 결과, `limit` def 20/max 50. SearchBar 드롭다운을 지역/단지 2섹션으로. Public(SecurityConfig permitAll). 성능: 170k ILIKE seq-scan(데모 OK, 대량화 시 `pg_trgm` GIN). PR #12(property-search).
 - (2026-06-22) **MAP-01 검색 필터 다중선택(§8.1)** — `dealType`·`propertyType`을 단일선택→**다중선택**으로 확대. 콤마 구분 수신(`dealType=SALE,JEONSE`, Spring `List<String>` 바인딩) → 매퍼 `deal_type/property_type IN (foreach)`(빈 리스트=조건 생략). 원소별 enum 검증(불량 1개라도 `400 INVALID_PARAM`). `MarkerFilter`의 `dealType`/`propertyType`(String)→`dealTypes`/`propertyTypes`(`List<String>`). 가격 필터는 단일 dealType 분기(deal_amount/deposit/COALESCE 3-way) 제거하고 **행별 `COALESCE(deal_amount, deposit)`** 단일화(매매행=매매가·전월세행=보증금, 혼합 선택 시 각 행 자기 컬럼). 프론트 `filter.dealType/propertyType`→배열, 칩 다중토글, `markers.js` 콤마 join. PR #12(property-search).
+- (2026-06-22) **§6 AI 요약 기능 Spring AI Tool/Resource/Planner 구조로 전면 재설계** — 기존 `RestTemplate` 직접 LLM 호출 방식 폐기. `mysql_ai_summaries` Read-Through 캐시(24h TTL, `expires_at` 컬럼 기반) 도입. Spring AI `ChatClient` + `@Tool`(`getPropertyDetail`·`getLocationBreakdown`·`getReviews`) + Planner(`PropertySummaryPlanner`·`ReviewSummaryPlanner`) 구조 확정. LLM 요청 전 캐시 조회 필수 게이트, Tool 단위 단위 테스트 필수화. §8.2 AI 엔드포인트 표·§8.3 DB 라우팅 표 정합 수정. §3 스택 표에 Spring AI 행 추가. GIGO 방지 디버깅 포인트 규칙(§6.9 말미) 명시.
 - (2026-06-22) **실거래가 적재 6종 일반화(§9)** — 아파트 매매 하드코딩(`deal_type='SALE'`/`property_type='APT'` 매퍼 고정) 제거. 종류(APT/OFFICETEL/ROW_HOUSE)×거래(매매/전월세) **6종 소스** 일반화: `IngestionService.ingestRealEstate(source,lawd,ymd)` + nationwide `sources` CSV 파라미터. `RealEstateRow`에 `dealType`/`propertyType`/`deposit`/`monthlyRent` 추가, 매퍼 `insertAptTrade`→`insertRealEstate`·`deleteAptTrade`→`deleteRealEstate(+dealType,propertyType)`. 종류별 단지명 필드(`aptNm`/`offiNm`/`mhouseNm`) fallback, `estateAgentSggNm` 공란 시 CSV 풀주소 보강(빌라 대응). 전월세 `monthlyRent>0?WOLSE:JEONSE`. application.yml paths 6종. **소스별 data.go.kr 활용신청 필요**(미신청 `Forbidden`→skip). PR #12(property-search).
 - (2026-06-21) **전국 POI 적재(§9)** — 전국 매물 점수 정확도 확보. `PoiIngestService.ingestPoisNationwide()` + `POST /admin/ingest/poi/nationwide` 신설. 전국 bbox 전수(빈 격자 5만+) 대신 **매물 존재 0.02도 격자만**(`findPropertyGridCells`, 강남+전국 실측 2,208개) 순회 → 카카오 호출 ~73k(일 쿼터 내). `clearPoi` 1회 후 격자별 autocommit(중간 실패 진행분 보존). 적재 후 `recompute-scores`로 전국 `property_score` 갱신. PR #12(property-search).
 - (2026-06-21) **전국 DETAIL 매물 적재(§9)** — 줌인 개별 매물 마커를 전국으로 확대. `IngestionService.ingestAptTradeNationwide(dealYmd)` + `POST /admin/ingest/real-estate/nationwide` 신설(번들 CSV 244 시군구 순회, 시군구별 독립 트랜잭션 via `ObjectProvider` self-proxy). **단지 좌표 캐싱**(`aptNm|jibun`)으로 지오코딩 호출 절감(강남 실측 unique 단지 46%). 202405 기준 37,595건 적재(지오코딩 성공률 92%). 점수(`property_score`)는 POI 적재 영역(강남권)만 유의미 — 전국 POI 적재는 후속. PR #12(property-search).
