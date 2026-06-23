@@ -5,7 +5,7 @@
     이미지=카카오 거리뷰(Roadview), 미니맵=카카오 맵, 리뷰=REV-01. 실거래가 추이는 placeholder(데이터 단일월).
     §7.4 단방향: 닫기만 emit, 지도 인스턴스는 안 만짐(여기 자체 kakao 인스턴스만 사용).
   -->
-  <section class="detail glass-bg animate-fade-in">
+  <section class="detail animate-fade-in">
     <header class="detail-top">
       <button class="back" @click="emit('close')">← 목록으로 돌아가기</button>
     </header>
@@ -40,7 +40,7 @@
           </div>
         </div>
 
-        <!-- 실거래가 추이 (placeholder — 데이터 단일월) -->
+        <!-- 실거래가 추이 (placeholder) -->
         <div class="card trend">
           <div class="card-title">📈 실거래가 추이</div>
           <div class="trend-placeholder">
@@ -53,12 +53,12 @@
         <div class="card reviews">
           <div class="card-title row">
             <span>리뷰 ({{ reviewTotal }})</span>
-            <button v-if="authStore.isAuthenticated" class="write-btn" @click="showWrite = !showWrite">
+            <button class="write-btn" @click="handleWriteClick">
               {{ showWrite ? '취소' : '리뷰 작성' }}
             </button>
           </div>
 
-          <form v-if="showWrite && authStore.isAuthenticated" class="review-form" @submit.prevent="submitReview">
+          <form v-if="showWrite" class="review-form" @submit.prevent="submitReview">
             <select v-model.number="newReview.rating" class="r-input">
               <option :value="5">★5 아주 좋아요</option>
               <option :value="4">★4 좋아요</option>
@@ -67,9 +67,15 @@
               <option :value="1">★1 최악</option>
             </select>
             <textarea v-model="newReview.content" rows="3" class="r-input" placeholder="리뷰 내용 (10~500자)"></textarea>
-            <button type="submit" class="submit" :disabled="submitting">{{ submitting ? '작성 중…' : '등록' }}</button>
+            <button type="submit" class="submit-btn" :disabled="submitting">{{ submitting ? '작성 중…' : '등록' }}</button>
           </form>
-          <p v-else-if="!authStore.isAuthenticated" class="login-hint">리뷰 작성은 로그인이 필요합니다.</p>
+
+          <!-- AI 요약 -->
+          <div v-if="summaryText" class="ai-summary">
+            <div class="ai-head">✨ AI 리뷰 요약</div>
+            <p>{{ summaryText }}</p>
+          </div>
+          <div v-else-if="loadingSummary" class="muted">AI 요약 생성 중…</div>
 
           <div v-if="loadingReviews" class="muted">불러오는 중…</div>
           <div v-else-if="reviews.length === 0" class="muted">아직 작성된 리뷰가 없습니다.</div>
@@ -124,11 +130,12 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { useMapStore } from '@/stores/map';
 import { useAuthStore } from '@/stores/auth';
 import { totalScore, groupScore, scoreColor, GROUPS } from '@/utils/score';
 import { dealLabel, typeLabel, priceLabel } from '@/utils/price';
-import { getReviews, createReview } from '@/api/review';
+import { getReviews, createReview, getReviewSummary } from '@/api/review';
 import { fetchPois } from '@/api/pois';
 
 const props = defineProps({
@@ -139,12 +146,23 @@ const emit = defineEmits(['close']);
 const p = computed(() => props.property);
 const mapStore = useMapStore();
 const authStore = useAuthStore();
+const router = useRouter();
+
+function handleWriteClick() {
+  if (!authStore.isAuthenticated) {
+    if (confirm('로그인이 필요합니다. 로그인 화면으로 이동하시겠습니까?')) {
+      router.push('/login');
+    }
+    return;
+  }
+  showWrite.value = !showWrite.value;
+}
 
 // ===== 점수(마커/목록과 동일 함수 → 일치) =====
 const score = computed(() => totalScore(p.value, mapStore.persona));
 const gScore = (key) => groupScore(p.value[key + 'Base'], key);
 const donutStyle = computed(() => ({
-  background: `conic-gradient(${scoreColor(score.value)} ${score.value * 3.6}deg, rgba(255,255,255,0.08) 0)`,
+  background: `conic-gradient(${scoreColor(score.value)} ${score.value * 3.6}deg, #e1e3e4 0)`,
 }));
 
 // ===== 인프라 세부 캡션(주변 500m POI 개수, MAP-02 Public) =====
@@ -163,7 +181,6 @@ const infraCaptions = ref({ transit: '', education: '', commerce: '', convenienc
 
 async function loadInfraCounts() {
   if (p.value.lat == null) return;
-  // 약 500m 박스(위도 ~0.0045°, 경도 ~0.0056°)
   const dLat = 0.0045, dLng = 0.0056;
   const bbox = `${p.value.lng - dLng},${p.value.lat - dLat},${p.value.lng + dLng},${p.value.lat + dLat}`;
   try {
@@ -229,12 +246,40 @@ const showWrite = ref(false);
 const submitting = ref(false);
 const newReview = reactive({ rating: 5, content: '' });
 
+const summaryText = ref(null);
+const loadingSummary = ref(false);
+
+async function loadReviewSummary() {
+  if (reviewTotal.value < 5) {
+    summaryText.value = null;
+    return;
+  }
+  loadingSummary.value = true;
+  try {
+    const data = await getReviewSummary('BUILDING', String(p.value.id));
+    if (data && data.summaryAvailable) {
+      summaryText.value = data.summary;
+    } else {
+      summaryText.value = null;
+    }
+  } catch (e) {
+    summaryText.value = null;
+  } finally {
+    loadingSummary.value = false;
+  }
+}
+
 async function loadReviews() {
   loadingReviews.value = true;
+  summaryText.value = null;
   try {
     const data = await getReviews('BUILDING', String(p.value.id), 0, 20);
     reviews.value = data.content ?? [];
     reviewTotal.value = data.totalElements ?? reviews.value.length;
+    
+    if (reviewTotal.value >= 5) {
+      loadReviewSummary();
+    }
   } catch (e) {
     reviews.value = [];
     reviewTotal.value = 0;
@@ -269,13 +314,31 @@ onUnmounted(() => {/* kakao 인스턴스는 컨테이너와 함께 GC */});
 </script>
 
 <style scoped>
+/* ── 팔레트 (DESIGN.md) ─────────────────────────────────────
+   Primary (Midnight Blue)    : #041627
+   Secondary (Terracotta)     : #944a00  accent: #fc8f34
+   Background (Soft Off-White): #f8f9fa
+   on-surface                 : #191c1d
+   on-surface-variant         : #44474c
+   outline                    : #74777d
+   outline-variant            : #c4c6cd
+   surface-container-low      : #f3f4f5
+   Level-1 shadow             : 0px 4px 12px rgba(26,43,60,0.05)
+   Level-2 shadow             : 0px 12px 32px rgba(26,43,60,0.12)
+────────────────────────────────────────────────────────────── */
+
 .detail {
   position: absolute;
-  inset: 0;
+  top: 0;
+  bottom: 0;
+  left: 320px;
+  right: 360px;
   z-index: 20;
-  background: var(--bg-primary);
+  background: #f8f9fa;
   overflow-y: auto;
   padding: 20px 32px 40px;
+  border-left: 1px solid #c4c6cd;
+  border-right: 1px solid #c4c6cd;
 }
 
 .detail-top {
@@ -285,14 +348,16 @@ onUnmounted(() => {/* kakao 인스턴스는 컨테이너와 함께 GC */});
 .back {
   background: transparent;
   border: none;
-  color: var(--text-secondary);
+  color: #44474c;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   padding: 6px 4px;
+  transition: color 0.15s ease;
 }
-.back:hover { color: var(--text-primary); }
+.back:hover { color: #041627; }
 
+/* 2컬럼 그리드 */
 .grid {
   display: grid;
   grid-template-columns: 1.6fr 1fr;
@@ -302,16 +367,18 @@ onUnmounted(() => {/* kakao 인스턴스는 컨테이너와 함께 GC */});
 }
 .col-left, .col-right { display: flex; flex-direction: column; gap: 20px; }
 
+/* 공통 카드 */
 .card {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg, 16px);
+  background: #ffffff;
+  border: 1px solid #c4c6cd;
+  border-radius: 16px;
   padding: 18px;
+  box-shadow: 0px 4px 12px rgba(26, 43, 60, 0.05);
 }
 .card-title {
   font-size: 14px;
   font-weight: 700;
-  color: var(--text-primary);
+  color: #041627;
   margin-bottom: 14px;
 }
 .card-title.center { text-align: center; }
@@ -323,63 +390,150 @@ onUnmounted(() => {/* kakao 인스턴스는 컨테이너와 함께 GC */});
 .roadview-fallback {
   position: absolute; inset: 0; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 10px;
-  color: var(--text-tertiary); background: rgba(255,255,255,0.02);
+  color: #74777d; background: #f3f4f5;
 }
-.roadview-fallback span { font-size: 40px; opacity: 0.5; }
+.roadview-fallback span { font-size: 40px; opacity: 0.4; }
+.roadview-fallback p { font-size: 13px; color: #74777d; }
 
 /* 매물 정보 */
-.info-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
-.bname { font-size: 22px; font-weight: 800; color: var(--text-primary); }
-.addr { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
-.price-wrap { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
-.deal-tag { font-size: 11px; font-weight: 700; color: var(--color-info); background: rgba(59,130,246,0.12); padding: 2px 8px; border-radius: 9999px; }
-.price { font-size: 22px; font-weight: 800; color: var(--text-primary); }
-.info-grid { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--border-color); padding-top: 14px; }
-.info-grid > div { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.info-grid .k { font-size: 11px; color: var(--text-tertiary); }
-.info-grid .v { font-size: 15px; font-weight: 700; color: var(--text-primary); }
-
-/* 추이 placeholder */
-.trend-placeholder {
-  height: 160px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
-  border: 1px dashed var(--border-color); border-radius: 12px; color: var(--text-tertiary);
+.info-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 16px; margin-bottom: 16px;
 }
+.bname { font-size: 22px; font-weight: 800; color: #041627; }
+.addr { font-size: 13px; color: #44474c; margin-top: 4px; }
+.price-wrap { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+.deal-tag {
+  font-size: 11px; font-weight: 700; color: #944a00;
+  background: rgba(148, 74, 0, 0.08);
+  padding: 2px 8px; border-radius: 9999px;
+}
+.price { font-size: 22px; font-weight: 800; color: #041627; }
+.info-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  border-top: 1px solid #e1e3e4; padding-top: 14px;
+}
+.info-grid > div { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.info-grid .k { font-size: 11px; color: #74777d; font-weight: 500; }
+.info-grid .v { font-size: 15px; font-weight: 700; color: #041627; }
+
+/* 실거래가 추이 placeholder */
+.trend-placeholder {
+  height: 160px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 6px;
+  border: 1px dashed #c4c6cd; border-radius: 12px;
+  color: #74777d; background: #f8f9fa;
+}
+.trend-placeholder span { font-size: 14px; font-weight: 600; }
 .trend-placeholder small { font-size: 11px; opacity: 0.7; }
 
-/* 리뷰 */
-.write-btn { background: var(--color-info); color: #fff; border: none; padding: 5px 12px; border-radius: 9999px; font-size: 12px; font-weight: 700; cursor: pointer; }
+/* 리뷰 섹션 */
+.write-btn {
+  background: #041627; color: #ffffff;
+  border: none; padding: 5px 12px;
+  border-radius: 9999px; font-size: 12px; font-weight: 700;
+  cursor: pointer; transition: all 0.15s ease;
+}
+.write-btn:hover { background: #1a2b3c; box-shadow: 0 0 8px rgba(252, 143, 52, 0.4); }
+
 .review-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
-.r-input { background: var(--bg-secondary, rgba(255,255,255,0.05)); border: 1px solid var(--border-color); border-radius: 8px; padding: 8px; color: var(--text-primary); font-family: inherit; }
-.submit { align-self: flex-end; background: var(--color-info); color: #fff; border: none; padding: 6px 16px; border-radius: 8px; font-weight: 700; cursor: pointer; }
-.submit:disabled { opacity: 0.6; }
-.login-hint { font-size: 12px; color: var(--text-tertiary); margin-bottom: 12px; }
-.muted { font-size: 13px; color: var(--text-tertiary); padding: 10px 0; }
+
+.r-input {
+  background: #f3f4f5;
+  border: 1px solid #c4c6cd;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #191c1d;
+  font-family: inherit;
+  font-size: 13px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+.r-input:focus {
+  border-color: #944a00;
+  box-shadow: 0 0 0 2px rgba(252, 143, 52, 0.2);
+  background: #ffffff;
+}
+
+.submit-btn {
+  align-self: flex-end;
+  background: #041627; color: #ffffff;
+  border: none; padding: 6px 18px;
+  border-radius: 8px; font-weight: 700; font-size: 13px;
+  cursor: pointer; transition: all 0.15s ease;
+}
+.submit-btn:hover:not(:disabled) {
+  background: #1a2b3c;
+  box-shadow: 0 0 8px rgba(252, 143, 52, 0.4);
+}
+.submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.login-hint { font-size: 12px; color: #74777d; margin-bottom: 12px; }
+.muted { font-size: 13px; color: #74777d; padding: 10px 0; }
+
+/* AI 요약 */
+.ai-summary {
+  background: #fff5ec;
+  border: 1px solid #fc8f34;
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+.ai-head {
+  font-size: 13px;
+  font-weight: 800;
+  color: #944a00;
+  margin-bottom: 6px;
+}
+.ai-summary p {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #44474c;
+  margin: 0;
+}
+
 .review-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-.review-item { background: rgba(255,255,255,0.03); border-radius: 10px; padding: 12px; }
+.review-item {
+  background: #f8f9fa;
+  border: 1px solid #e1e3e4;
+  border-radius: 10px; padding: 12px;
+}
 .rv-head { display: flex; gap: 10px; align-items: center; margin-bottom: 4px; }
-.rv-nick { font-weight: 700; font-size: 13px; color: var(--text-primary); }
-.rv-rating { font-size: 12px; color: var(--text-secondary); }
-.rv-content { font-size: 13px; line-height: 1.5; color: var(--text-secondary); white-space: pre-wrap; }
+.rv-nick { font-weight: 700; font-size: 13px; color: #041627; }
+.rv-rating { font-size: 12px; color: #944a00; font-weight: 600; }
+.rv-content { font-size: 13px; line-height: 1.6; color: #44474c; white-space: pre-wrap; margin: 0; }
 
 /* 종합점수 도넛 */
 .score-card { display: flex; flex-direction: column; align-items: center; }
-.donut { width: 180px; height: 180px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.donut {
+  width: 180px; height: 180px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+}
 .donut-hole {
-  width: 132px; height: 132px; border-radius: 50%; background: var(--bg-primary);
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  width: 132px; height: 132px; border-radius: 50%;
+  background: #ffffff;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  box-shadow: inset 0 2px 8px rgba(26, 43, 60, 0.06);
 }
 .donut-score { font-size: 44px; font-weight: 800; line-height: 1; }
-.donut-max { font-size: 13px; color: var(--text-tertiary); margin-top: 2px; }
-.score-cap { font-size: 12px; color: var(--text-secondary); margin-top: 14px; }
+.donut-max { font-size: 13px; color: #74777d; margin-top: 2px; }
+.score-cap { font-size: 12px; color: #74777d; margin-top: 14px; }
 
-/* 세부 바 */
-.bd-row { margin-bottom: 14px; }
+/* 세부 분석 바 */
+.bd-row { margin-bottom: 16px; }
+.bd-row:last-child { margin-bottom: 0; }
 .bd-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-.bd-label { font-size: 13px; color: var(--text-primary); font-weight: 600; }
+.bd-label { font-size: 13px; color: #191c1d; font-weight: 600; }
 .bd-val { font-size: 14px; font-weight: 800; }
-.bd-track { display: block; width: 100%; height: 6px; background: rgba(255,255,255,0.08); border-radius: 9999px; overflow: hidden; }
+.bd-track {
+  display: block; width: 100%; height: 6px;
+  background: #e1e3e4; border-radius: 9999px; overflow: hidden;
+}
 .bd-track i { display: block; height: 100%; border-radius: 9999px; transition: width 0.4s ease; }
-.bd-cap { margin-top: 5px; font-size: 11px; color: var(--text-tertiary); }
+.bd-cap { margin-top: 5px; font-size: 11px; color: #74777d; }
 
 /* 미니맵 */
 .mini-map { width: 100%; height: 200px; border-radius: 12px; overflow: hidden; }

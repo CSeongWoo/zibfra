@@ -1,19 +1,28 @@
 <template>
-  <main class="workspace animate-fade-in">
+  <!--
+    홈: 풀스크린 지도 + 지도 위 모든 오버레이.
+    §7.4 단방향: propertyId만 발신 → 여기서 마커 객체를 찾아 상세페이지를 연다.
+  -->
+  <main class="relative h-screen w-full overflow-hidden animate-fade-in">
     <MapContainer @marker-click="onMarkerClick" />
 
-    <!-- 와이어3 좌측 통합 사이드바: 필터 + 인프라 토글 + 페르소나 -->
+    <!-- ① Floating Topbar: 검색 + 검색 버튼만 -->
+    <div class="topbar">
+      <SearchBar />
+    </div>
+
+    <!-- ② 와이어3 좌측 통합 사이드바 (반응형 토글) -->
     <FilterSidebar />
 
-    <!-- 와이어3 우측: 매물 목록(점수배지 + 4미니바). 카드 클릭 = 마커 클릭과 동일 -->
+    <!-- ③ 와이어3 우측 매물 목록 (반응형 토글) -->
     <PropertyListPanel @select="onMarkerClick" />
 
-    <!-- 와이어3 지도 컨트롤: 범례(좌하단) · 현위치(하단중앙) · 줌(우하단) -->
+    <!-- ④ 지도 컨트롤: 범례(좌하단) · 현위치(하단중앙) · 줌(우하단) -->
     <MapLegend />
     <LocateButton />
     <ZoomButtons />
 
-    <!-- 매물 선택 시 상세페이지(#17). 리뷰는 상세페이지 내부에 임베드 -->
+    <!-- ⑤ 매물 상세페이지(#17). 리뷰는 상세페이지 내부에 임베드 -->
     <PropertyDetailPanel
       v-if="selectedProperty"
       :property="selectedProperty"
@@ -32,22 +41,35 @@ import MapLegend from '@/components/search/MapLegend.vue';
 import LocateButton from '@/components/search/LocateButton.vue';
 import ZoomButtons from '@/components/search/ZoomButtons.vue';
 import PropertyDetailPanel from '@/components/property/PropertyDetailPanel.vue';
+import SearchBar from '@/components/search/SearchBar.vue';
 
 const mapStore = useMapStore();
 const selectedProperty = ref(null);
 
-// §7.4: 지도/목록은 propertyId만 발신 → 여기서 마커 객체를 찾아 상세페이지를 연다.
 function onMarkerClick(propertyId) {
   selectedProperty.value = mapStore.markers.find((m) => m.id === propertyId) ?? null;
 }
 </script>
 
 <style scoped>
-.workspace {
-  flex: 1;
-  position: relative;
-  height: calc(100vh - 64px);
-  width: 100%;
-  overflow: hidden;
+/* ── Floating Topbar (검색 전용) ──────────────────────────── */
+.topbar {
+  position: absolute;
+  top: 16px;
+  left: 336px;
+  right: 392px;
+  z-index: 10;
+  height: 52px;
+  min-width: 240px;
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid #c4c6cd;
+  border-radius: 9999px;
+  padding: 0 8px 0 16px;
+  box-shadow: 0px 4px 12px rgba(26, 43, 60, 0.08);
+  overflow: visible;
 }
 </style>

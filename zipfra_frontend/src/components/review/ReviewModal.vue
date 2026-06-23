@@ -1,11 +1,11 @@
 <template>
   <div v-if="isOpen" class="modal-overlay" @click.self="closeModal">
-    <div class="modal-content glass-panel animate-fade-in">
+    <div class="modal-content animate-fade-in">
       <header class="modal-header">
         <h2>리뷰 ({{ targetType }}: {{ targetId }})</h2>
         <button class="close-btn" @click="closeModal">×</button>
       </header>
-      
+
       <div class="modal-body">
         <!-- Review Write Section -->
         <div v-if="authStore.isAuthenticated" class="review-write-section">
@@ -23,10 +23,10 @@
             </div>
             <div class="form-group">
               <label>내용 (개인정보는 자동 마스킹됩니다)</label>
-              <textarea 
-                v-model="newReview.content" 
-                rows="4" 
-                required 
+              <textarea
+                v-model="newReview.content"
+                rows="4"
+                required
                 class="form-input"
                 placeholder="리뷰 내용을 작성해주세요."
               ></textarea>
@@ -38,7 +38,7 @@
         </div>
         <div v-else class="login-prompt">
           <p>리뷰를 작성하려면 로그인이 필요합니다.</p>
-          <button @click="goToLogin" class="auth-btn login-btn">로그인</button>
+          <button @click="goToLogin" class="login-btn">로그인</button>
         </div>
 
         <hr class="divider" />
@@ -59,7 +59,7 @@
               </div>
               <p class="content">{{ review.content }}</p>
             </div>
-            
+
             <div class="pagination" v-if="totalPages > 1">
               <button :disabled="page === 0" @click="changePage(page - 1)">이전</button>
               <span>{{ page + 1 }} / {{ totalPages }}</span>
@@ -162,7 +162,7 @@ function goToLogin() {
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(4, 22, 39, 0.5);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -175,22 +175,26 @@ function goToLogin() {
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  background: var(--bg-primary);
-  border-radius: var(--radius-lg);
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #c4c6cd;
+  box-shadow: 0px 12px 32px rgba(26, 43, 60, 0.12);
   overflow: hidden;
 }
 
 .modal-header {
   padding: 1rem 1.5rem;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid #e1e3e4;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  background: #f8f9fa;
 }
 
 .modal-header h2 {
-  font-size: 1.25rem;
+  font-size: 1.1rem;
   font-weight: 700;
+  color: #041627;
   margin: 0;
 }
 
@@ -199,12 +203,26 @@ function goToLogin() {
   border: none;
   font-size: 1.5rem;
   cursor: pointer;
-  color: var(--text-secondary);
+  color: #74777d;
+  transition: color 0.15s ease;
+  line-height: 1;
+}
+
+.close-btn:hover {
+  color: #041627;
 }
 
 .modal-body {
   padding: 1.5rem;
   overflow-y: auto;
+}
+
+.review-write-section h3,
+.review-list-section h3 {
+  font-size: 14px;
+  font-weight: 700;
+  color: #041627;
+  margin-bottom: 1rem;
 }
 
 .form-group {
@@ -213,72 +231,118 @@ function goToLogin() {
 
 .form-group label {
   display: block;
-  font-size: 0.875rem;
-  margin-bottom: 0.5rem;
-  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: #44474c;
+  letter-spacing: 0.04em;
 }
 
 .form-input {
   width: 100%;
   padding: 0.75rem;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
+  background: #f3f4f5;
+  border: 1px solid #c4c6cd;
+  border-radius: 8px;
+  color: #191c1d;
   font-family: inherit;
+  font-size: 14px;
   resize: vertical;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.form-input:focus {
+  border-color: #944a00;
+  box-shadow: 0 0 0 2px rgba(252, 143, 52, 0.2);
+  background: #ffffff;
 }
 
 .submit-btn {
-  background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%);
-  color: #fff;
+  background: #041627;
+  color: #ffffff;
   border: none;
   padding: 0.75rem 1.5rem;
-  border-radius: var(--radius-sm);
-  font-weight: 600;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 14px;
   cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.submit-btn:hover:not(:disabled) {
+  box-shadow: 0 0 8px rgba(252, 143, 52, 0.4);
+  background: #1a2b3c;
 }
 
 .submit-btn:disabled {
-  opacity: 0.7;
+  opacity: 0.6;
   cursor: not-allowed;
 }
 
 .divider {
   border: 0;
-  border-top: 1px solid var(--border-color);
+  border-top: 1px solid #e1e3e4;
   margin: 1.5rem 0;
 }
 
+/* 리뷰 아이템 */
 .review-item {
-  background: var(--bg-secondary);
+  background: #f8f9fa;
   padding: 1rem;
-  border-radius: var(--radius-md);
-  margin-bottom: 1rem;
+  border-radius: 12px;
+  border: 1px solid #e1e3e4;
+  margin-bottom: 0.75rem;
+}
+
+.review-item:last-child {
+  margin-bottom: 0;
 }
 
 .review-header {
   display: flex;
-  gap: 1rem;
+  gap: 0.75rem;
   margin-bottom: 0.5rem;
   font-size: 0.875rem;
+  align-items: center;
 }
 
 .nickname {
   font-weight: 700;
+  color: #041627;
+}
+
+.rating {
+  color: #944a00;
+  font-weight: 600;
+  font-size: 12px;
 }
 
 .date {
-  color: var(--text-secondary);
+  color: #74777d;
   margin-left: auto;
+  font-size: 12px;
 }
 
 .content {
-  font-size: 0.95rem;
-  line-height: 1.5;
+  font-size: 14px;
+  line-height: 1.6;
   white-space: pre-wrap;
+  color: #191c1d;
+  margin: 0;
 }
 
+/* 로딩 / 빈 목록 */
+.loading,
+.empty {
+  text-align: center;
+  padding: 2rem;
+  font-size: 14px;
+  color: #74777d;
+}
+
+/* 페이지네이션 */
 .pagination {
   display: flex;
   justify-content: center;
@@ -288,38 +352,60 @@ function goToLogin() {
 }
 
 .pagination button {
-  padding: 0.5rem 1rem;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  padding: 6px 14px;
+  background: #ffffff;
+  border: 1px solid #c4c6cd;
+  border-radius: 8px;
+  color: #041627;
+  font-weight: 600;
+  font-size: 13px;
   cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pagination button:hover:not(:disabled) {
+  border-color: #944a00;
+  color: #944a00;
+  background: #fff5ec;
 }
 
 .pagination button:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
-.auth-btn {
-  padding: 6px 16px;
-  border-radius: 9999px;
+.pagination span {
   font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  border: none;
-  transition: all 0.25s ease;
-  outline: none;
+  color: #44474c;
+  font-weight: 600;
 }
-.login-btn {
-  background: linear-gradient(135deg, #4f46e5 0%, #2563eb 100%);
-  color: #ffffff;
-}
+
+/* 로그인 유도 */
 .login-prompt {
   text-align: center;
   padding: 2rem 0;
 }
+
 .login-prompt p {
   margin-bottom: 1rem;
-  color: var(--text-secondary);
+  color: #74777d;
+  font-size: 14px;
+}
+
+.login-btn {
+  background: #041627;
+  color: #ffffff;
+  border: none;
+  padding: 8px 20px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.login-btn:hover {
+  background: #1a2b3c;
+  box-shadow: 0 0 8px rgba(252, 143, 52, 0.4);
 }
 </style>

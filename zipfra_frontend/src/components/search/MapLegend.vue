@@ -1,6 +1,6 @@
 <template>
   <!-- 점수 색상 범례(와이어3 좌하단). score.js scoreColor 임계와 일치. -->
-  <div class="legend glass-panel">
+  <div class="legend">
     <span class="title">인프라 점수</span>
     <span class="item" v-for="t in TIERS" :key="t.label">
       <i :style="{ background: t.color }"></i>{{ t.label }}
@@ -20,28 +20,32 @@ const TIERS = [
 <style scoped>
 .legend {
   position: absolute;
-  left: 288px; /* 좌측 사이드바(256+여백) 우측 */
+  left: 336px; /* 좌측 사이드바(320px) 우측 */
   bottom: 24px;
   z-index: 5;
   display: flex;
   flex-direction: column;
   gap: 7px;
   padding: 12px 14px;
-  border-radius: var(--radius-md, 12px);
+  border-radius: 12px;
   font-size: 11px;
-  color: var(--text-secondary);
+  background: #ffffff;
+  border: 1px solid #c4c6cd;
+  box-shadow: 0px 4px 12px rgba(26, 43, 60, 0.08);
 }
 
 .title {
   font-weight: 700;
-  color: var(--text-primary);
+  color: #041627;
   margin-bottom: 2px;
+  font-size: 12px;
 }
 
 .item {
   display: flex;
   align-items: center;
   gap: 8px;
+  color: #44474c;
 }
 
 .item i {
@@ -49,5 +53,6 @@ const TIERS = [
   height: 10px;
   border-radius: 9999px;
   display: inline-block;
+  flex-shrink: 0;
 }
 </style>
