@@ -9,13 +9,13 @@
   테이블 DDL (참고):
   CREATE TABLE mysql_ai_summaries (
       id               BIGINT       NOT NULL AUTO_INCREMENT,
-      summary_type     VARCHAR(20)  NOT NULL,           -- PROPERTY | REVIEW
+      summary_type     VARCHAR(20)  NOT NULL,           [PROPERTY | REVIEW]
       target_id        BIGINT       NOT NULL,
-      target_type      VARCHAR(20)  NULL,               -- NULL(PROPERTY) | BUILDING | AREA
+      target_type      VARCHAR(20)  NULL,               [NULL(PROPERTY) | BUILDING | AREA]
       summary_available TINYINT(1)  NOT NULL DEFAULT 0,
-      summary_json     JSON         NULL,               -- 전체 응답 페이로드 (summaryAvailable=false 시 NULL)
+      summary_json     JSON         NULL,               [전체 응답 페이로드, summaryAvailable=false 시 NULL]
       created_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      expires_at       DATETIME     NOT NULL,           -- created_at + TTL
+      expires_at       DATETIME     NOT NULL,           [created_at + TTL]
       PRIMARY KEY (id),
       UNIQUE KEY uq_summary (summary_type, target_id, target_type)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

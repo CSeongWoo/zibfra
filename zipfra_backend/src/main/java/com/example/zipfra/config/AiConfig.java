@@ -1,5 +1,8 @@
 package com.example.zipfra.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -15,6 +18,20 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration
 public class AiConfig {
+
+    /**
+     * Jackson ObjectMapper 빈 명시 등록.
+     *
+     * <p>Spring Boot 4.0 환경(특히 DevTools RestartClassLoader)에서
+     * JacksonAutoConfiguration의 ObjectMapper 빈이 생성자 주입 시 조회되지 않는 경우를 방지.
+     * JavaTimeModule 등록으로 LocalDateTime 직렬화(ISO-8601) 지원.
+     */
+    @Bean
+    public ObjectMapper objectMapper() {
+        return new ObjectMapper()
+                .registerModule(new JavaTimeModule())
+                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+    }
 
     /**
      * ChatClient 빈 등록.
