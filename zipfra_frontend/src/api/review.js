@@ -16,3 +16,12 @@ export async function createReview(targetType, targetId, content, rating) {
   });
   return response.data;
 }
+
+export async function getReviewSummary(targetType, targetId, maxReviews = 30) {
+  const response = await http.post('/ai/review-summary', {
+    targetType,
+    targetId,
+    maxReviews
+  });
+  return response.data;
+}

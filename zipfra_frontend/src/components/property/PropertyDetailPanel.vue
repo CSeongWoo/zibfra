@@ -53,12 +53,12 @@
         <div class="card reviews">
           <div class="card-title row">
             <span>리뷰 ({{ reviewTotal }})</span>
-            <button v-if="authStore.isAuthenticated" class="write-btn" @click="showWrite = !showWrite">
+            <button class="write-btn" @click="handleWriteClick">
               {{ showWrite ? '취소' : '리뷰 작성' }}
             </button>
           </div>
 
-          <form v-if="showWrite && authStore.isAuthenticated" class="review-form" @submit.prevent="submitReview">
+          <form v-if="showWrite" class="review-form" @submit.prevent="submitReview">
             <select v-model.number="newReview.rating" class="r-input">
               <option :value="5">★5 아주 좋아요</option>
               <option :value="4">★4 좋아요</option>
@@ -69,7 +69,13 @@
             <textarea v-model="newReview.content" rows="3" class="r-input" placeholder="리뷰 내용 (10~500자)"></textarea>
             <button type="submit" class="submit-btn" :disabled="submitting">{{ submitting ? '작성 중…' : '등록' }}</button>
           </form>
-          <p v-else-if="!authStore.isAuthenticated" class="login-hint">리뷰 작성은 로그인이 필요합니다.</p>
+
+          <!-- AI 요약 -->
+          <div v-if="summaryText" class="ai-summary">
+            <div class="ai-head">✨ AI 리뷰 요약</div>
+            <p>{{ summaryText }}</p>
+          </div>
+          <div v-else-if="loadingSummary" class="muted">AI 요약 생성 중…</div>
 
           <div v-if="loadingReviews" class="muted">불러오는 중…</div>
           <div v-else-if="reviews.length === 0" class="muted">아직 작성된 리뷰가 없습니다.</div>
@@ -124,11 +130,12 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { useMapStore } from '@/stores/map';
 import { useAuthStore } from '@/stores/auth';
 import { totalScore, groupScore, scoreColor, GROUPS } from '@/utils/score';
 import { dealLabel, typeLabel, priceLabel } from '@/utils/price';
-import { getReviews, createReview } from '@/api/review';
+import { getReviews, createReview, getReviewSummary } from '@/api/review';
 import { fetchPois } from '@/api/pois';
 
 const props = defineProps({
@@ -139,6 +146,17 @@ const emit = defineEmits(['close']);
 const p = computed(() => props.property);
 const mapStore = useMapStore();
 const authStore = useAuthStore();
+const router = useRouter();
+
+function handleWriteClick() {
+  if (!authStore.isAuthenticated) {
+    if (confirm('로그인이 필요합니다. 로그인 화면으로 이동하시겠습니까?')) {
+      router.push('/login');
+    }
+    return;
+  }
+  showWrite.value = !showWrite.value;
+}
 
 // ===== 점수(마커/목록과 동일 함수 → 일치) =====
 const score = computed(() => totalScore(p.value, mapStore.persona));
@@ -228,12 +246,40 @@ const showWrite = ref(false);
 const submitting = ref(false);
 const newReview = reactive({ rating: 5, content: '' });
 
+const summaryText = ref(null);
+const loadingSummary = ref(false);
+
+async function loadReviewSummary() {
+  if (reviewTotal.value < 5) {
+    summaryText.value = null;
+    return;
+  }
+  loadingSummary.value = true;
+  try {
+    const data = await getReviewSummary('BUILDING', String(p.value.id));
+    if (data && data.summaryAvailable) {
+      summaryText.value = data.summary;
+    } else {
+      summaryText.value = null;
+    }
+  } catch (e) {
+    summaryText.value = null;
+  } finally {
+    loadingSummary.value = false;
+  }
+}
+
 async function loadReviews() {
   loadingReviews.value = true;
+  summaryText.value = null;
   try {
     const data = await getReviews('BUILDING', String(p.value.id), 0, 20);
     reviews.value = data.content ?? [];
     reviewTotal.value = data.totalElements ?? reviews.value.length;
+    
+    if (reviewTotal.value >= 5) {
+      loadReviewSummary();
+    }
   } catch (e) {
     reviews.value = [];
     reviewTotal.value = 0;
@@ -283,11 +329,16 @@ onUnmounted(() => {/* kakao 인스턴스는 컨테이너와 함께 GC */});
 
 .detail {
   position: absolute;
-  inset: 0;
+  top: 0;
+  bottom: 0;
+  left: 320px;
+  right: 360px;
   z-index: 20;
   background: #f8f9fa;
   overflow-y: auto;
   padding: 20px 32px 40px;
+  border-left: 1px solid #c4c6cd;
+  border-right: 1px solid #c4c6cd;
 }
 
 .detail-top {
@@ -421,6 +472,27 @@ onUnmounted(() => {/* kakao 인스턴스는 컨테이너와 함께 GC */});
 
 .login-hint { font-size: 12px; color: #74777d; margin-bottom: 12px; }
 .muted { font-size: 13px; color: #74777d; padding: 10px 0; }
+
+/* AI 요약 */
+.ai-summary {
+  background: #fff5ec;
+  border: 1px solid #fc8f34;
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+.ai-head {
+  font-size: 13px;
+  font-weight: 800;
+  color: #944a00;
+  margin-bottom: 6px;
+}
+.ai-summary p {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #44474c;
+  margin: 0;
+}
 
 .review-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .review-item {
