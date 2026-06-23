@@ -1,16 +1,16 @@
 <template>
   <!--
-    좌측 도킹 통합 사이드바: 검색(#4) + 검색 필터(§8.1) + 인프라 토글 + 페르소나 가중치(#6).
+    좌측 도킹 통합 사이드바: 검색 필터(§8.1, 거래/매물 유형·가격) + 페르소나 가중치(#6).
     반응형 토글 지원: 토글 탭으로 접기/펼치기.
     필터 → store.filter(MapContainer 가 MAP-01 재조회), 페르소나 → store.persona(점수 실시간 갱신).
   -->
-  <aside class="sidebar" :class="{ collapsed: !open }">
+  <aside class="sidebar" :class="{ collapsed: !mapStore.sidebarOpen }">
     <!-- 펼침/접기 탭 -->
-    <button class="toggle-tab" @click="open = !open" :title="open ? '사이드바 접기' : '사이드바 펼치기'">
-      <span>{{ open ? '◀' : '▶' }}</span>
+    <button class="toggle-tab" @click="mapStore.toggleSidebar()" :title="mapStore.sidebarOpen ? '사이드바 접기' : '사이드바 펼치기'">
+      <span>{{ mapStore.sidebarOpen ? '◀' : '▶' }}</span>
     </button>
 
-    <div class="sidebar-inner" v-show="open">
+    <div class="sidebar-inner" v-show="mapStore.sidebarOpen">
 
       <!-- 로고 + 인증 헤더 -->
       <div class="sidebar-header">
@@ -56,33 +56,28 @@
 
         <div class="group">
           <span class="label">
-            가격 범위 (억)
+            가격 범위
             <em v-if="depositOnly">· 보증금</em>
             <em v-else>· 매매가/보증금</em>
           </span>
+          <!-- 직접 입력(천만 단위): 정밀 지정 -->
+          <div class="price-inputs">
+            <input type="number" min="0" inputmode="numeric" :value="minInput" @input="onMinInput" placeholder="최소" />
+            <span class="unit">천만</span>
+            <span class="sep">~</span>
+            <input type="number" min="0" inputmode="numeric" :value="maxInput" @input="onMaxInput" placeholder="최대" />
+            <span class="unit">천만</span>
+          </div>
+          <!-- 비균등 슬라이더(눈금 균등, 값은 오른쪽으로 갈수록 점프): 빠른 지정 -->
           <div class="dual">
             <div class="dual-track"></div>
             <div class="dual-fill" :style="fillStyle"></div>
-            <input type="range" :min="0" :max="MAX" :step="STEP" :value="minVal" @input="onMinSlider" />
-            <input type="range" :min="0" :max="MAX" :step="STEP" :value="maxVal" @input="onMaxSlider" />
+            <input type="range" :min="0" :max="MAX_IDX" :step="1" :value="minIdx" @input="onMinSlider" />
+            <input type="range" :min="0" :max="MAX_IDX" :step="1" :value="maxIdx" @input="onMaxSlider" />
           </div>
           <div class="dual-vals">
-            <span>{{ formatPrice(minVal) }}</span>
-            <span>{{ maxVal >= MAX ? formatPrice(MAX) + '+' : formatPrice(maxVal) }}</span>
-          </div>
-        </div>
-
-        <div class="group">
-          <span class="label">인프라 표시</span>
-          <div class="infra-toggles">
-            <button
-              v-for="g in GROUPS" :key="g.key"
-              class="infra" :class="{ off: !infraLayers[g.key] }"
-              @click="mapStore.toggleInfra(g.key)"
-            >
-              <span class="dot" :style="{ background: infraLayers[g.key] ? g.color : 'transparent', borderColor: g.color }"></span>
-              {{ g.icon }} {{ g.long }}
-            </button>
+            <span>{{ minIdx <= 0 ? '0' : formatPriceStop(idxToPrice(minIdx)) }}</span>
+            <span>{{ maxIdx >= MAX_IDX ? formatPriceStop(idxToPrice(MAX_IDX)) + '+' : formatPriceStop(idxToPrice(maxIdx)) }}</span>
           </div>
         </div>
 
@@ -127,15 +122,13 @@ import { useRouter } from 'vue-router';
 import { useMapStore } from '@/stores/map';
 import { useAuthStore } from '@/stores/auth';
 import { PERSONA_PRESETS, GROUPS } from '@/utils/score';
+import { PRICE_MAX_IDX, idxToPrice, priceToIdx, formatPriceStop } from '@/utils/price';
 
 const mapStore = useMapStore();
 const authStore = useAuthStore();
 const router = useRouter();
 const filter = computed(() => mapStore.filter);
 const persona = computed(() => mapStore.persona);
-const infraLayers = computed(() => mapStore.infraLayers);
-
-const open = ref(true);
 
 function goToLogin() {
   router.push('/login');
@@ -165,26 +158,40 @@ const depositOnly = computed(() => {
   return d.length > 0 && d.every((v) => v === 'JEONSE' || v === 'WOLSE');
 });
 
-const MAX = 500000;
-const STEP = 5000;
-const minVal = computed(() => filter.value.priceMin ?? 0);
-const maxVal = computed(() => filter.value.priceMax ?? MAX);
+// 가격: 입력칸(천만 단위, 정밀)과 비균등 슬라이더(인덱스 기반, 빠름)가 같은 priceMin/Max(만원)를 공유.
+const MAX_IDX = PRICE_MAX_IDX;
+const minIdx = computed(() => priceToIdx(filter.value.priceMin));
+const maxIdx = computed(() => (filter.value.priceMax == null ? MAX_IDX : priceToIdx(filter.value.priceMax)));
+const minInput = computed(() => (filter.value.priceMin == null ? '' : filter.value.priceMin / 1000));
+const maxInput = computed(() => (filter.value.priceMax == null ? '' : filter.value.priceMax / 1000));
 const fillStyle = computed(() => ({
-  left: `${(minVal.value / MAX) * 100}%`,
-  right: `${100 - (maxVal.value / MAX) * 100}%`,
+  left: `${(minIdx.value / MAX_IDX) * 100}%`,
+  right: `${100 - (maxIdx.value / MAX_IDX) * 100}%`,
 }));
 
+// 슬라이더: 인덱스 → 스텝 가격. 핸들 교차 방지로 한 칸 여유 두고 클램프.
 function onMinSlider(e) {
-  const v = Math.min(Number(e.target.value), maxVal.value - STEP);
+  const idx = Math.max(0, Math.min(Number(e.target.value), maxIdx.value - 1));
+  const v = idxToPrice(idx);
   mapStore.setFilter({ priceMin: v <= 0 ? null : v });
 }
 function onMaxSlider(e) {
-  const v = Math.max(Number(e.target.value), minVal.value + STEP);
-  mapStore.setFilter({ priceMax: v >= MAX ? null : v });
+  const idx = Math.min(MAX_IDX, Math.max(Number(e.target.value), minIdx.value + 1));
+  mapStore.setFilter({ priceMax: idx >= MAX_IDX ? null : idxToPrice(idx) });
 }
 
-function formatPrice(manwon) {
-  return manwon <= 0 ? '0' : `${manwon / 10000}억`;
+// 입력칸(천만 단위): 빈 칸 = 무제한(null). 천만 → 만원 환산(×1000).
+function onMinInput(e) {
+  const raw = e.target.value;
+  if (raw === '' || raw == null) { mapStore.setFilter({ priceMin: null }); return; }
+  const v = Math.max(0, Number(raw)) * 1000;
+  mapStore.setFilter({ priceMin: v <= 0 ? null : v });
+}
+function onMaxInput(e) {
+  const raw = e.target.value;
+  if (raw === '' || raw == null) { mapStore.setFilter({ priceMax: null }); return; }
+  const v = Math.max(0, Number(raw)) * 1000;
+  mapStore.setFilter({ priceMax: v <= 0 ? null : v });
 }
 
 const lockedPreset = ref(null);
@@ -425,6 +432,44 @@ function onPreset(p) {
   color: #ffffff;
 }
 
+/* 가격 직접 입력칸 (천만 단위) */
+.price-inputs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.price-inputs input {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid #c4c6cd;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #041627;
+  text-align: right;
+}
+
+.price-inputs input:focus {
+  outline: none;
+  border-color: #944a00;
+  box-shadow: 0 0 0 2px rgba(252, 143, 52, 0.15);
+}
+
+.price-inputs .unit {
+  font-size: 11px;
+  color: #74777d;
+  flex: none;
+}
+
+.price-inputs .sep {
+  font-size: 12px;
+  color: #74777d;
+  flex: none;
+  padding: 0 2px;
+}
+
 /* 가격 듀얼 슬라이더 */
 .dual {
   position: relative;
@@ -474,27 +519,6 @@ function onPreset(p) {
 .dual-vals {
   display: flex; justify-content: space-between;
   font-size: 11px; color: #74777d;
-}
-
-/* 인프라 토글 */
-.infra-toggles { display: flex; flex-direction: column; gap: 4px; }
-
-.infra {
-  display: flex; align-items: center; gap: 8px;
-  padding: 5px 4px;
-  background: transparent; border: none;
-  color: #191c1d; font-size: 12px; font-weight: 500;
-  cursor: pointer;
-  transition: opacity 0.15s ease;
-  text-align: left;
-}
-
-.infra.off { opacity: 0.35; }
-
-.infra .dot {
-  width: 14px; height: 14px;
-  border-radius: 4px; border: 2px solid;
-  flex-shrink: 0;
 }
 
 /* 페르소나 카드 */

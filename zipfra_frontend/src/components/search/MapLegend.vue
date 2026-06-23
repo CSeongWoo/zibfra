@@ -1,6 +1,6 @@
 <template>
-  <!-- 점수 색상 범례(와이어3 좌하단). score.js scoreColor 임계와 일치. -->
-  <div class="legend">
+  <!-- 점수 색상 범례(좌하단). 필터 사이드바 접고 펼 때 사이드바 폭만큼 좌우 이동. score.js scoreColor 임계와 일치. -->
+  <div class="legend" :class="{ 'sidebar-collapsed': !mapStore.sidebarOpen }">
     <span class="title">인프라 점수</span>
     <span class="item" v-for="t in TIERS" :key="t.label">
       <i :style="{ background: t.color }"></i>{{ t.label }}
@@ -9,6 +9,9 @@
 </template>
 
 <script setup>
+import { useMapStore } from '@/stores/map';
+
+const mapStore = useMapStore();
 const TIERS = [
   { color: '#10b981', label: '90+' },
   { color: '#3b82f6', label: '75–89' },
@@ -20,8 +23,9 @@ const TIERS = [
 <style scoped>
 .legend {
   position: absolute;
-  left: 336px; /* 좌측 사이드바(320px) 우측 */
+  left: 336px; /* 사이드바(320px) 펼침 시: 그 우측 */
   bottom: 24px;
+  transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 5;
   display: flex;
   flex-direction: column;
@@ -32,6 +36,11 @@ const TIERS = [
   background: #ffffff;
   border: 1px solid #c4c6cd;
   box-shadow: 0px 4px 12px rgba(26, 43, 60, 0.08);
+}
+
+/* 사이드바 접힘 시: 화면 좌측 끝으로(토글 탭 30px 비켜) */
+.legend.sidebar-collapsed {
+  left: 40px;
 }
 
 .title {

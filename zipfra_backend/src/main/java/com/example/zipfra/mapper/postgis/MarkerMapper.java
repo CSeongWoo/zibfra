@@ -24,8 +24,8 @@ public interface MarkerMapper {
                                 @Param("size") int size,
                                 @Param("offset") long offset);
 
-    /** SUMMARY: bbox 내 시·군·구 사전 집계. */
-    List<RegionSummaryDTO> findRegionSummaries(@Param("bbox") Bbox bbox);
+    /** SUMMARY: bbox 내 시·군·구별 매물 갯수(실시간 COUNT) + 필터 반영(기능5, §8.1.1). */
+    List<RegionSummaryDTO> findRegionSummaries(@Param("bbox") Bbox bbox, @Param("filter") MarkerFilter filter);
 
     /** MAP-03: 단지명 부분일치 검색(단지 단위 집계, dealCount 내림차순). */
     List<PropertySearchDTO> searchProperties(@Param("q") String q, @Param("limit") int limit);

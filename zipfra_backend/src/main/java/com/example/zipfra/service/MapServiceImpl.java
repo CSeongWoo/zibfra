@@ -74,7 +74,7 @@ public class MapServiceImpl implements MapService {
             }
             return detail(bbox, page, size, filter);
         }
-        return summary(bbox, oversized);   // SUMMARY 는 필터 무시(§8.1.1)
+        return summary(bbox, oversized, filter);   // SUMMARY 도 매물 갯수에 필터 반영(기능5, §8.1.1)
     }
 
     /** 검색 필터의 거래/매물 유형 값(다중)이 enum 에 속하는지 원소별 검증(§8.1). 불량 시 INVALID_PARAM. */
@@ -109,8 +109,8 @@ public class MapServiceImpl implements MapService {
         return MarkerResponse.detail(markers, page, size, totalCount, hasNext);
     }
 
-    private MarkerResponse summary(Bbox bbox, boolean oversized) {
-        List<RegionSummaryDTO> regions = markerMapper.findRegionSummaries(bbox);
+    private MarkerResponse summary(Bbox bbox, boolean oversized, MarkerFilter filter) {
+        List<RegionSummaryDTO> regions = markerMapper.findRegionSummaries(bbox, filter);
         return MarkerResponse.summary(regions, oversized);
     }
 

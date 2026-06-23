@@ -88,17 +88,36 @@
         LIMIT #{limit}
     </select>
 
-    <!-- SUMMARY: bbox 내 시·군·구 사전 집계 -->
+    <!--
+      SUMMARY: bbox 내 시·군·구별 매물 갯수(실시간 COUNT) + 검색 필터 반영(기능5, §8.1.1).
+      이름·중심좌표·평균/최고가는 region_summary(rs)에서, 갯수는 real_estate_sales(res)를 GiST bbox 필터 후
+      LEFT(lawd_cd,5) 로 GROUP BY 하여 COUNT. geom 은 두 테이블 모두 있어 res. 로 한정(모호성 방지).
+      필터 조각은 res. 한정이라 공통 bboxAndFilter 를 재사용하지 않고 인라인.
+    -->
     <select id="findRegionSummaries" resultType="com.example.zipfra.dto.map.RegionSummaryDTO">
-        SELECT region_cd,
-               region_name,
-               center_lat AS lat,
-               center_lon AS lng,
-               deal_count,
-               avg_amount,
-               max_amount
-        FROM region_summary
-        WHERE geom &amp;&amp; ST_MakeEnvelope(#{bbox.minLng}, #{bbox.minLat}, #{bbox.maxLng}, #{bbox.maxLat}, 4326)
+        SELECT LEFT(res.lawd_cd, 5) AS region_cd,
+               rs.region_name,
+               rs.center_lat        AS lat,
+               rs.center_lon        AS lng,
+               COUNT(*)             AS property_count,
+               rs.avg_amount,
+               rs.max_amount
+        FROM real_estate_sales res
+        JOIN region_summary rs ON rs.region_cd = LEFT(res.lawd_cd, 5)
+        WHERE res.geom &amp;&amp; ST_MakeEnvelope(#{bbox.minLng}, #{bbox.minLat}, #{bbox.maxLng}, #{bbox.maxLat}, 4326)
+        <if test="filter != null">
+            <if test="filter.dealTypes != null and !filter.dealTypes.isEmpty()">
+                AND res.deal_type IN
+                <foreach item="dt" collection="filter.dealTypes" open="(" separator="," close=")">#{dt}</foreach>
+            </if>
+            <if test="filter.propertyTypes != null and !filter.propertyTypes.isEmpty()">
+                AND res.property_type IN
+                <foreach item="pt" collection="filter.propertyTypes" open="(" separator="," close=")">#{pt}</foreach>
+            </if>
+            <if test="filter.priceMin != null">AND COALESCE(res.deal_amount, res.deposit) &gt;= #{filter.priceMin}</if>
+            <if test="filter.priceMax != null">AND COALESCE(res.deal_amount, res.deposit) &lt;= #{filter.priceMax}</if>
+        </if>
+        GROUP BY LEFT(res.lawd_cd, 5), rs.region_name, rs.center_lat, rs.center_lon, rs.avg_amount, rs.max_amount
         ORDER BY region_cd
     </select>
 

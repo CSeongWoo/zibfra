@@ -46,7 +46,7 @@ class MapServiceImplTest {
     @Test
     @DisplayName("T-2: zoom=14 → SUMMARY")
     void zoom14_summary() {
-        when(markerMapper.findRegionSummaries(any())).thenReturn(List.of());
+        when(markerMapper.findRegionSummaries(any(), any())).thenReturn(List.of());
         MarkerResponse res = service().getMarkers(SMALL_BBOX, 14, null, null, NO_FILTER);
         assertThat(res.getStrategy()).isEqualTo("SUMMARY");
     }
@@ -84,7 +84,7 @@ class MapServiceImplTest {
     @Test
     @DisplayName("T-1/T-4: 대각>150km + zoom=10 → SUMMARY + bboxOversized")
     void hugeBbox_summary_downgraded() {
-        when(markerMapper.findRegionSummaries(any())).thenReturn(List.of());
+        when(markerMapper.findRegionSummaries(any(), any())).thenReturn(List.of());
         MarkerResponse res = service().getMarkers(HUGE_BBOX, 10, null, null, NO_FILTER);
         assertThat(res.getStrategy()).isEqualTo("SUMMARY");
         assertThat(res.isBboxOversized()).isTrue();
