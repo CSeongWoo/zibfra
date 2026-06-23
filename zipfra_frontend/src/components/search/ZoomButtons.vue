@@ -1,6 +1,6 @@
 <template>
   <!-- 줌 +/-(와이어3 우하단). store.requestZoom → KakaoMap 이 setLevel(§7.4 단방향). -->
-  <div class="zoom glass-panel">
+  <div class="zoom">
     <button @click="mapStore.requestZoom(1)" title="확대">＋</button>
     <span class="divider"></span>
     <button @click="mapStore.requestZoom(-1)" title="축소">－</button>
@@ -17,13 +17,16 @@ const mapStore = useMapStore();
 .zoom {
   position: absolute;
   bottom: 24px;
-  right: 352px; /* 우측 매물 목록(320+여백) 좌측 */
+  right: 376px; /* 우측 매물 목록(360px) 좌측 */
   z-index: 5;
   display: flex;
   flex-direction: column;
   align-items: center;
-  border-radius: var(--radius-md, 12px);
+  border-radius: 12px;
   overflow: hidden;
+  background: #ffffff;
+  border: 1px solid #c4c6cd;
+  box-shadow: 0px 4px 12px rgba(26, 43, 60, 0.08);
 }
 
 .zoom button {
@@ -31,7 +34,7 @@ const mapStore = useMapStore();
   height: 40px;
   background: transparent;
   border: none;
-  color: var(--text-primary);
+  color: #041627;
   font-size: 18px;
   font-weight: 700;
   cursor: pointer;
@@ -39,12 +42,13 @@ const mapStore = useMapStore();
 }
 
 .zoom button:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: #f3f4f5;
+  color: #944a00;
 }
 
 .divider {
   width: 60%;
   height: 1px;
-  background: var(--border-color);
+  background: #c4c6cd;
 }
 </style>
