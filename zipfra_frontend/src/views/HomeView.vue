@@ -13,33 +13,32 @@
     <LocateButton />
     <ZoomButtons />
 
-    <!-- 매물 선택 시 리뷰 모달 직결(Dev B 컴포넌트, §7.4 단방향) -->
-    <ReviewModal
-      :isOpen="isReviewModalOpen"
-      targetType="BUILDING"
-      :targetId="String(selectedPropertyId)"
-      @close="isReviewModalOpen = false"
+    <!-- 매물 선택 시 상세페이지(#17). 리뷰는 상세페이지 내부에 임베드 -->
+    <PropertyDetailPanel
+      v-if="selectedProperty"
+      :property="selectedProperty"
+      @close="selectedProperty = null"
     />
   </main>
 </template>
 
 <script setup>
 import { ref } from 'vue';
+import { useMapStore } from '@/stores/map';
 import MapContainer from '@/components/map/MapContainer.vue';
 import FilterSidebar from '@/components/search/FilterSidebar.vue';
 import PropertyListPanel from '@/components/search/PropertyListPanel.vue';
 import MapLegend from '@/components/search/MapLegend.vue';
 import LocateButton from '@/components/search/LocateButton.vue';
 import ZoomButtons from '@/components/search/ZoomButtons.vue';
-import ReviewModal from '@/components/review/ReviewModal.vue';
+import PropertyDetailPanel from '@/components/property/PropertyDetailPanel.vue';
 
-const selectedPropertyId = ref(null);
-const isReviewModalOpen = ref(false);
+const mapStore = useMapStore();
+const selectedProperty = ref(null);
 
-// §7.4: 지도/목록은 propertyId만 발신. 여기서 모달을 연다(상세 페이지는 후속 PR B).
+// §7.4: 지도/목록은 propertyId만 발신 → 여기서 마커 객체를 찾아 상세페이지를 연다.
 function onMarkerClick(propertyId) {
-  selectedPropertyId.value = propertyId;
-  isReviewModalOpen.value = true;
+  selectedProperty.value = mapStore.markers.find((m) => m.id === propertyId) ?? null;
 }
 </script>
 
