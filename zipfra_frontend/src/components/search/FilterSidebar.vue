@@ -1,100 +1,112 @@
 <template>
   <!--
-    와이어3 좌측 통합 사이드바: 검색 필터(§8.1.1) + 인프라 표시 토글 + 페르소나 가중치(#6).
-    필터 → store.filter(MapContainer 가 MAP-01 재조회), 페르소나 → store.persona(점수 실시간 갱신),
-    인프라 토글 → store.infraLayers(오버레이 표시, 실제 렌더는 PR C). 모두 단방향(§7.4).
+    좌측 도킹 통합 사이드바: 검색(#4) + 검색 필터(§8.1) + 인프라 토글 + 페르소나 가중치(#6).
+    구조: 상단 검색(고정) + 스크롤 본문(스크롤바 숨김 #2). 모두 단방향(§7.4).
+    필터 → store.filter(MapContainer 가 MAP-01 재조회), 페르소나 → store.persona(점수 실시간 갱신).
   -->
   <aside class="sidebar glass-panel">
-    <!-- ===== 필터 ===== -->
-    <h3 class="sec-title">🔎 필터</h3>
-
-    <div class="group">
-      <span class="label">거래 유형</span>
-      <div class="chips">
-        <button
-          v-for="o in DEAL_TYPES" :key="o.value"
-          class="chip" :class="{ active: filter.dealType === o.value }"
-          @click="toggle('dealType', o.value)"
-        >{{ o.label }}</button>
-      </div>
+    <!-- 검색창(필터바 상단 고정) + 검색결과 토글 드롭다운 -->
+    <div class="sidebar-search">
+      <SearchBar />
     </div>
 
-    <div class="group">
-      <span class="label">매물 유형</span>
-      <div class="chips">
-        <button
-          v-for="o in PROPERTY_TYPES" :key="o.value"
-          class="chip" :class="{ active: filter.propertyType === o.value }"
-          @click="toggle('propertyType', o.value)"
-        >{{ o.label }}</button>
-      </div>
-    </div>
+    <div class="sidebar-body">
+      <!-- ===== 필터 ===== -->
+      <h3 class="sec-title">🔎 필터</h3>
 
-    <div class="group">
-      <span class="label">
-        가격 범위 (억)
-        <em v-if="filter.dealType === 'JEONSE' || filter.dealType === 'WOLSE'">· 보증금</em>
-        <em v-else-if="!filter.dealType">· 매매가/보증금</em>
-      </span>
-      <div class="dual">
-        <div class="dual-track"></div>
-        <div class="dual-fill" :style="fillStyle"></div>
-        <input type="range" :min="0" :max="MAX" :step="STEP" :value="minVal" @input="onMinSlider" />
-        <input type="range" :min="0" :max="MAX" :step="STEP" :value="maxVal" @input="onMaxSlider" />
-      </div>
-      <div class="dual-vals">
-        <span>{{ formatPrice(minVal) }}</span>
-        <span>{{ maxVal >= MAX ? formatPrice(MAX) + '+' : formatPrice(maxVal) }}</span>
-      </div>
-    </div>
-
-    <div class="group">
-      <span class="label">인프라 표시</span>
-      <div class="infra-toggles">
-        <button
-          v-for="g in GROUPS" :key="g.key"
-          class="infra" :class="{ off: !infraLayers[g.key] }"
-          @click="mapStore.toggleInfra(g.key)"
-        >
-          <span class="dot" :style="{ background: infraLayers[g.key] ? g.color : 'transparent', borderColor: g.color }"></span>
-          {{ g.icon }} {{ g.long }}
-        </button>
-      </div>
-    </div>
-
-    <!-- ===== 페르소나 ===== -->
-    <div class="persona-card">
-      <h3 class="sec-title">🎚 페르소나 가중치</h3>
-      <p class="desc">슬라이더 조정 시 지도 마커와 목록 점수가 실시간 업데이트됩니다.</p>
-
-      <div class="slider" v-for="g in GROUPS" :key="g.key">
-        <div class="slider-top">
-          <span>{{ g.icon }} {{ g.long }}</span>
-          <em :style="{ color: g.color }">{{ persona[g.key] }}</em>
+      <div class="group">
+        <span class="label">거래 유형 <em>· 중복 선택</em></span>
+        <div class="chips">
+          <button
+            v-for="o in DEAL_TYPES" :key="o.value"
+            class="chip" :class="{ active: filter.dealTypes.includes(o.value) }"
+            @click="mapStore.toggleFilterValue('dealTypes', o.value)"
+          >{{ o.label }}</button>
         </div>
-        <input
-          type="range" min="0" max="100" step="10"
-          :value="persona[g.key]"
-          :style="{ accentColor: g.color }"
-          @input="mapStore.setPersona({ [g.key]: Number($event.target.value) })"
-        />
       </div>
 
-      <div class="presets">
-        <button
-          v-for="p in PERSONA_PRESETS" :key="p.key"
-          class="preset" :class="{ active: activeKey === p.key }"
-          @click="mapStore.setPersona({ ...p.weights })"
-        >{{ p.label }}</button>
+      <div class="group">
+        <span class="label">매물 유형 <em>· 중복 선택</em></span>
+        <div class="chips">
+          <button
+            v-for="o in PROPERTY_TYPES" :key="o.value"
+            class="chip" :class="{ active: filter.propertyTypes.includes(o.value) }"
+            @click="mapStore.toggleFilterValue('propertyTypes', o.value)"
+          >{{ o.label }}</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <span class="label">
+          가격 범위 (억)
+          <em v-if="depositOnly">· 보증금</em>
+          <em v-else>· 매매가/보증금</em>
+        </span>
+        <div class="dual">
+          <div class="dual-track"></div>
+          <div class="dual-fill" :style="fillStyle"></div>
+          <input type="range" :min="0" :max="MAX" :step="STEP" :value="minVal" @input="onMinSlider" />
+          <input type="range" :min="0" :max="MAX" :step="STEP" :value="maxVal" @input="onMaxSlider" />
+        </div>
+        <div class="dual-vals">
+          <span>{{ formatPrice(minVal) }}</span>
+          <span>{{ maxVal >= MAX ? formatPrice(MAX) + '+' : formatPrice(maxVal) }}</span>
+        </div>
+      </div>
+
+      <div class="group">
+        <span class="label">인프라 표시</span>
+        <div class="infra-toggles">
+          <button
+            v-for="g in GROUPS" :key="g.key"
+            class="infra" :class="{ off: !infraLayers[g.key] }"
+            @click="mapStore.toggleInfra(g.key)"
+          >
+            <span class="dot" :style="{ background: infraLayers[g.key] ? g.color : 'transparent', borderColor: g.color }"></span>
+            {{ g.icon }} {{ g.long }}
+          </button>
+        </div>
+      </div>
+
+      <!-- ===== 페르소나 ===== -->
+      <div class="persona-card">
+        <h3 class="sec-title">🎚 페르소나 가중치</h3>
+        <p class="desc">
+          <template v-if="lockedPreset">프리셋 적용 중 — 같은 버튼을 다시 누르면 직접 조절할 수 있습니다.</template>
+          <template v-else>슬라이더 조정 시 지도 마커와 목록 점수가 실시간 업데이트됩니다.</template>
+        </p>
+
+        <div class="slider" :class="{ locked: lockedPreset }" v-for="g in GROUPS" :key="g.key">
+          <div class="slider-top">
+            <span>{{ g.icon }} {{ g.long }}</span>
+            <em :style="{ color: g.color }">{{ persona[g.key] }}</em>
+          </div>
+          <input
+            type="range" min="0" max="100" step="10"
+            :value="persona[g.key]"
+            :disabled="lockedPreset !== null"
+            :style="{ accentColor: g.color }"
+            @input="mapStore.setPersona({ [g.key]: Number($event.target.value) })"
+          />
+        </div>
+
+        <div class="presets">
+          <button
+            v-for="p in PERSONA_PRESETS" :key="p.key"
+            class="preset" :class="{ active: lockedPreset === p.key }"
+            @click="onPreset(p)"
+          >{{ p.label }}</button>
+        </div>
       </div>
     </div>
   </aside>
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { ref, computed } from 'vue';
 import { useMapStore } from '@/stores/map';
 import { PERSONA_PRESETS, GROUPS } from '@/utils/score';
+import SearchBar from '@/components/search/SearchBar.vue';
 
 const mapStore = useMapStore();
 const filter = computed(() => mapStore.filter);
@@ -109,15 +121,16 @@ const DEAL_TYPES = [
 const PROPERTY_TYPES = [
   { label: '아파트', value: 'APT' },
   { label: '오피스텔', value: 'OFFICETEL' },
-  { label: '빌라', value: 'ROW_HOUSE' }, // 원룸 제외(3종 확정, §8.1.1)
+  { label: '빌라', value: 'ROW_HOUSE' }, // 원룸 제외(3종 확정, §8.1)
 ];
 
-// 같은 칩 재클릭 → 해제(전체). '전체' 칩 없이 단일 토글(와이어3).
-function toggle(key, value) {
-  mapStore.setFilter({ [key]: filter.value[key] === value ? null : value });
-}
+// 선택한 거래유형이 전부 전·월세면 가격 라벨을 '보증금'으로(매매가 없을 때).
+const depositOnly = computed(() => {
+  const d = filter.value.dealTypes;
+  return d.length > 0 && d.every((v) => v === 'JEONSE' || v === 'WOLSE');
+});
 
-// 가격: 슬라이더(만원 단위)와 입력칸(억 단위)이 같은 filter.priceMin/Max(만원)를 공유.
+// 가격: 슬라이더(만원 단위)와 표시(억 단위)가 같은 filter.priceMin/Max(만원)를 공유.
 const MAX = 500000; // 50억(만원)
 const STEP = 5000;  // 5천만(만원)
 const minVal = computed(() => filter.value.priceMin ?? 0);
@@ -136,30 +149,56 @@ function onMaxSlider(e) {
   mapStore.setFilter({ priceMax: v >= MAX ? null : v });
 }
 
-// 슬라이더 현재 값 표시(억). 0 은 하한 없음.
 function formatPrice(manwon) {
   return manwon <= 0 ? '0' : `${manwon / 10000}억`;
 }
 
-const activeKey = computed(() => {
-  const p = persona.value;
-  const hit = PERSONA_PRESETS.find((preset) => GROUPS.every((g) => preset.weights[g.key] === p[g.key]));
-  return hit ? hit.key : null;
-});
+// #5 페르소나 프리셋 잠금: 프리셋 적용 시 슬라이더 비활성, 같은 프리셋 재클릭 시 해제.
+const lockedPreset = ref(null);
+function onPreset(p) {
+  if (lockedPreset.value === p.key) {
+    lockedPreset.value = null; // 재클릭 → 잠금 해제(슬라이더 다시 활성, 가중치는 유지)
+  } else {
+    mapStore.setPersona({ ...p.weights }); // 적용 + 잠금
+    lockedPreset.value = p.key;
+  }
+}
 </script>
 
 <style scoped>
+/* #1 좌측 가장자리 도킹: 떠있던 16px 여백·라운딩 제거, 헤더 아래 full-height */
 .sidebar {
   position: absolute;
-  top: 16px;
-  left: 16px;
-  bottom: 16px;
+  top: 0;
+  left: 0;
+  bottom: 0;
   z-index: 6;
-  width: 256px;
-  padding: 16px 18px;
-  border-radius: var(--radius-lg, 16px);
+  width: 280px;
+  border-radius: 0;
+  border-top: none;
+  border-left: none;
+  border-bottom: none;
   font-size: 13px;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-search {
+  flex: none;
+  padding: 14px 16px 10px;
+}
+
+/* #2 스크롤바 숨김(스크롤 기능은 유지) */
+.sidebar-body {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  padding: 4px 18px 18px;
+  scrollbar-width: none;
+}
+
+.sidebar-body::-webkit-scrollbar {
+  display: none;
 }
 
 .sec-title {
@@ -276,7 +315,6 @@ const activeKey = computed(() => {
   cursor: pointer;
 }
 
-/* 가격 현재 범위 표시 */
 .dual-vals {
   display: flex;
   justify-content: space-between;
@@ -337,6 +375,11 @@ const activeKey = computed(() => {
   margin-bottom: 12px;
 }
 
+/* #5 프리셋 잠금 시 슬라이더 흐리게(비활성) */
+.slider.locked {
+  opacity: 0.45;
+}
+
 .slider-top {
   display: flex;
   justify-content: space-between;
@@ -353,6 +396,10 @@ const activeKey = computed(() => {
 .slider input[type='range'] {
   width: 100%;
   cursor: pointer;
+}
+
+.slider input[type='range']:disabled {
+  cursor: not-allowed;
 }
 
 .presets {

@@ -5,6 +5,7 @@ import java.util.List;
 import com.example.zipfra.dto.map.Bbox;
 import com.example.zipfra.dto.map.MarkerDTO;
 import com.example.zipfra.dto.map.MarkerFilter;
+import com.example.zipfra.dto.map.PropertySearchDTO;
 import com.example.zipfra.dto.map.RegionSummaryDTO;
 import org.apache.ibatis.annotations.Param;
 
@@ -25,4 +26,7 @@ public interface MarkerMapper {
 
     /** SUMMARY: bbox 내 시·군·구 사전 집계. */
     List<RegionSummaryDTO> findRegionSummaries(@Param("bbox") Bbox bbox);
+
+    /** MAP-03: 단지명 부분일치 검색(단지 단위 집계, dealCount 내림차순). */
+    List<PropertySearchDTO> searchProperties(@Param("q") String q, @Param("limit") int limit);
 }

@@ -14,13 +14,21 @@ export const useMapStore = defineStore('map', () => {
   const zoom = ref(null);     // 카카오 level (서버가 임계값으로 재판정)
   const strategy = ref(null); // 서버 응답 전략: 'DETAIL' | 'SUMMARY'
 
-  // MAP-01 검색 필터(§8.1.1, PR A). null = 미지정(전체). MAP-01 DETAIL 에서만 적용.
+  // MAP-01 검색 필터(§8.1, PR A). 빈 배열 = 전체. MAP-01 DETAIL 에서만 적용.
+  // dealTypes/propertyTypes 는 다중선택(§8.1 다중선택 계약) — markers.js 가 콤마 join.
   const filter = ref({
-    dealType: null,      // SALE | JEONSE | WOLSE
-    propertyType: null,  // APT | OFFICETEL | ROW_HOUSE
+    dealTypes: [],       // (SALE | JEONSE | WOLSE)[]
+    propertyTypes: [],   // (APT | OFFICETEL | ROW_HOUSE)[]
     priceMin: null,      // 만원
     priceMax: null,      // 만원
   });
+
+  /** 다중선택 칩 토글: 배열에 있으면 제거, 없으면 추가. */
+  function toggleFilterValue(key, value) {
+    const cur = filter.value[key] ?? [];
+    const next = cur.includes(value) ? cur.filter((v) => v !== value) : [...cur, value];
+    filter.value = { ...filter.value, [key]: next };
+  }
 
   // 현재 DETAIL 마커 목록(MAP-01 응답). 지도와 우측 목록 패널이 공유(§7.4 단방향).
   const markers = ref([]);
@@ -88,7 +96,7 @@ export const useMapStore = defineStore('map', () => {
 
   return {
     bbox, zoom, strategy, filter, persona, markers, regions, moveTarget, infraLayers, zoomReq, pois,
-    setViewport, setStrategy, setFilter, setPersona, setMarkers, setRegions,
+    setViewport, setStrategy, setFilter, toggleFilterValue, setPersona, setMarkers, setRegions,
     requestMove, toggleInfra, requestZoom, setPois,
   };
 });

@@ -12,6 +12,7 @@ import com.example.zipfra.dto.map.MarkerDTO;
 import com.example.zipfra.dto.map.MarkerFilter;
 import com.example.zipfra.dto.map.MarkerResponse;
 import com.example.zipfra.dto.map.PoiMarkerDTO;
+import com.example.zipfra.dto.map.PropertySearchDTO;
 import com.example.zipfra.dto.map.PropertyType;
 import com.example.zipfra.dto.map.RegionSummaryDTO;
 import com.example.zipfra.mapper.postgis.MarkerMapper;
@@ -37,6 +38,9 @@ public class MapServiceImpl implements MapService {
     static final int MAX_PAGE_SIZE = 200;
     static final int DEFAULT_SIZE = 100;
     static final int DEFAULT_PAGE = 0;
+    static final int SEARCH_MIN_LEN = 2;        // 2자 미만 검색어는 무시(전체 seq-scan 방지)
+    static final int SEARCH_DEFAULT_LIMIT = 20;
+    static final int SEARCH_MAX_LIMIT = 50;
 
     private final MarkerMapper markerMapper;
     private final PoiMapper poiMapper;
@@ -73,16 +77,16 @@ public class MapServiceImpl implements MapService {
         return summary(bbox, oversized);   // SUMMARY 는 필터 무시(§8.1.1)
     }
 
-    /** 검색 필터의 거래/매물 유형 값이 enum 에 속하는지 검증(§8.1.1). 불량 시 INVALID_PARAM. */
+    /** 검색 필터의 거래/매물 유형 값(다중)이 enum 에 속하는지 원소별 검증(§8.1). 불량 시 INVALID_PARAM. */
     private void validateFilter(MarkerFilter filter) {
         if (filter == null) {
             return;
         }
-        if (filter.getDealType() != null) {
-            requireEnum(filter.getDealType(), DealType.class, "dealType");
+        if (filter.getDealTypes() != null) {
+            filter.getDealTypes().forEach(v -> requireEnum(v, DealType.class, "dealType"));
         }
-        if (filter.getPropertyType() != null) {
-            requireEnum(filter.getPropertyType(), PropertyType.class, "propertyType");
+        if (filter.getPropertyTypes() != null) {
+            filter.getPropertyTypes().forEach(v -> requireEnum(v, PropertyType.class, "propertyType"));
         }
     }
 
@@ -108,6 +112,20 @@ public class MapServiceImpl implements MapService {
     private MarkerResponse summary(Bbox bbox, boolean oversized) {
         List<RegionSummaryDTO> regions = markerMapper.findRegionSummaries(bbox);
         return MarkerResponse.summary(regions, oversized);
+    }
+
+    @Override
+    @Transactional(transactionManager = "spatialTransactionManager", readOnly = true, propagation = Propagation.SUPPORTS)
+    public List<PropertySearchDTO> searchProperties(String q, Integer limitParam) {
+        if (q == null || q.trim().length() < SEARCH_MIN_LEN) {
+            return List.of();   // 2자 미만은 검색하지 않음(전체 스캔·과다결과 방지)
+        }
+        int limit = (limitParam != null) ? limitParam : SEARCH_DEFAULT_LIMIT;
+        if (limit < 1 || limit > SEARCH_MAX_LIMIT) {
+            throw new ApiException(ErrorCode.INVALID_PARAM,
+                    "limit 는 1~" + SEARCH_MAX_LIMIT + " 입니다: " + limit);
+        }
+        return markerMapper.searchProperties(q.trim(), limit);
     }
 
     @Override

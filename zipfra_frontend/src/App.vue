@@ -7,8 +7,6 @@
         <h1>SSAFY <span class="logo-accent">HOME</span></h1>
       </router-link>
 
-      <SearchBar v-if="showMapUI" class="header-search" />
-
       <nav v-if="showMapUI" class="tabs">
         <router-link to="/" class="tab" exact-active-class="active">지도검색</router-link>
         <span class="tab disabled" @click="alert('준비 중입니다')">내 정보</span>
@@ -47,7 +45,6 @@
 import { useRouter, useRoute } from 'vue-router';
 import { computed } from 'vue';
 import { useAuthStore } from '@/stores/auth';
-import SearchBar from '@/components/search/SearchBar.vue';
 
 const authStore = useAuthStore();
 const router = useRouter();

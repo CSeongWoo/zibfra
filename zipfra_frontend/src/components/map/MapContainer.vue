@@ -37,12 +37,12 @@ function kakaoLevelToZoom(level) {
 async function loadMarkers() {
   if (!lastBbox.value) return;
   try {
-    const f = mapStore.filter; // §8.1.1 검색 필터(null 은 markers.js 가 전송 생략)
+    const f = mapStore.filter; // §8.1 검색 필터(빈 배열·null 은 markers.js 가 전송 생략)
     const data = await fetchMarkers({
       bbox: lastBbox.value,
       zoom: kakaoLevelToZoom(lastLevel.value),
-      dealType: f.dealType,
-      propertyType: f.propertyType,
+      dealType: f.dealTypes,        // 다중선택 배열 → markers.js 가 콤마 join
+      propertyType: f.propertyTypes,
       priceMin: f.priceMin,
       priceMax: f.priceMax,
     });
