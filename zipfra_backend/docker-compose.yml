@@ -1,0 +1,60 @@
+# Zipfra 로컬 인프라 — MySQL(쓰기·인증) / PostGIS(읽기·공간) / Redis(토큰 상태)
+# 사용: docker compose up -d
+# 비밀번호·DB명은 zipfra_backend/.env 기본값(1234 등)과 일치시킴.
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: zipfra-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "1234"
+      MYSQL_DATABASE: zipfra
+      TZ: Asia/Seoul
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - zipfra-mysql-data:/var/lib/mysql
+      # 최초 기동 시 스키마·테이블 자동 생성 (DROP/CREATE SCHEMA zipfra 포함)
+      - ./zipfra_backend/src/main/resources/db/migration/table.sql:/docker-entrypoint-initdb.d/01-table.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p1234"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  postgis:
+    image: postgis/postgis:18-3.6
+    container_name: zipfra-postgis
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: zipfra_spatial
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "1234"
+      TZ: Asia/Seoul
+    volumes:
+      - zipfra-postgis-data:/var/lib/postgresql
+      # 최초 기동 시 PostGIS 확장 + 공간 테이블/인덱스 자동 생성
+      - ./zipfra_backend/src/main/resources/db/migration/postgre_table.sql:/docker-entrypoint-initdb.d/01-postgre_table.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d zipfra_spatial"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: zipfra-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  zipfra-mysql-data:
+  zipfra-postgis-data:

@@ -55,6 +55,20 @@ public enum ErrorCode {
     /** kangwon — 외부 API HTTP 4xx */
     UPSTREAM_CLIENT_ERROR(HttpStatus.BAD_GATEWAY, "외부 API 가 오류를 반환했습니다."),
 
+    // ==== [AI 요약 - AGENTS.md §6.9] ====
+    /** AI-01: propertyId에 해당하는 매물 없음 (getPropertyDetail Tool 오류) */
+    PROPERTY_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 매물입니다."),
+    /** AI-01/02: 일일 AI 쿼터 초과 (Retry-After: 86400) */
+    AI_QUOTA_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "일일 AI 요약 쿼터를 초과했습니다.", 86400),
+
+    // ==== [리뷰] ====
+    REVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 리뷰입니다."),
+    REVIEW_FORBIDDEN(HttpStatus.FORBIDDEN, "본인이 작성한 리뷰만 수정/삭제할 수 있습니다."),
+
+    // ==== [즐겨찾기] ====
+    FAVORITE_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 즐겨찾기에 추가된 매물입니다."),
+    FAVORITE_NOT_FOUND(HttpStatus.NOT_FOUND, "즐겨찾기 항목을 찾을 수 없습니다."),
+
     // ==== [공통] ====
     INVALID_PARAM(HttpStatus.BAD_REQUEST, "잘못된 요청 파라미터입니다."),
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.");

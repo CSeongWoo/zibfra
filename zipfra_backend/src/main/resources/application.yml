@@ -71,8 +71,29 @@ mybatis:
   configuration:
     map-underscore-to-camel-case: true
 
+# Spring AI (AGENTS.md §3 확정 — gpt-4o-mini, RestTemplate 직접 호출 금지)
+spring:
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      # [CRITICAL] 공식 OpenAI가 아닌 SSAFY GMS 게이트웨이 서버로 API 라우팅을 강제합니다.
+      base-url: ${OPENAI_BASE_URL:https://gms.ssafy.io/gmsapi/api.openai.com/v1}
+      chat:
+        options:
+          model: gpt-4o-mini          # AGENTS.md §6.2 확정 모델
+          temperature: 0.3            # 사실 기반 요약 — 낮은 온도
+          max-tokens: 400             # AI-02 출력 상한(AI-01은 서비스에서 300 오버라이드)
+          timeout: 10000              # LLM 타임아웃 10s (§6.2 p95 < 10초)
+# AI 요약 쿼터 설정 (AGENTS.md §6.8)
+ai:
+  quota:
+    daily-limit: 100  # 사용자 1인당 일일 AI 호출 상한 (LLM 단가 확정 후 재설정)
+  summary:
+    cache-ttl-hours: 24   # mysql_ai_summaries expires_at TTL (§6.3)
+
 # Logging
 logging:
   level:
     com.example.zipfra: DEBUG
     com.zaxxer.hikari: INFO
+    org.springframework.ai: INFO

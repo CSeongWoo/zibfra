@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+  AI-01 getPropertyDetail Tool 전용 PostGIS 매퍼 (AGENTS.md §6.4.1).
+  spatialSqlSessionFactory가 classpath:mapper/postgis/**/*.xml을 스캔.
+  좌표는 ST_X/ST_Y로 double 분리(§4 좌표 매핑 표준).
+-->
+<mapper namespace="com.example.zipfra.mapper.postgis.PropertyDetailMapper">
+
+    <resultMap id="PropertyDetailResultMap" type="com.example.zipfra.dto.ai.PropertyDetailDTO">
+        <id     property="id"           column="id"/>
+        <result property="buildingName" column="building_name"/>
+        <result property="dealAmount"   column="deal_amount"/>
+        <result property="deposit"      column="deposit"/>
+        <result property="monthlyRent"  column="monthly_rent"/>
+        <result property="area"         column="area"/>
+        <result property="floor"        column="floor"/>
+        <result property="beopjungdong" column="beopjungdong"/>
+        <result property="dealType"     column="deal_type"/>
+        <result property="propertyType" column="property_type"/>
+        <result property="dealYm"       column="deal_ym"/>
+        <result property="buildYear"    column="build_year"/>
+        <result property="lon"          column="lon"/>
+        <result property="lat"          column="lat"/>
+    </resultMap>
+
+    <!--
+      매물 상세 조회 (AI-01 Tool용).
+      - ST_X/ST_Y로 좌표를 double 분리(§4 "좌표 매핑 표준")
+      - apt_name이 building_name 컬럼명 alias로 매핑
+    -->
+    <select id="findById" resultMap="PropertyDetailResultMap">
+        SELECT
+            id,
+            apt_name          AS building_name,
+            deal_amount,
+            deposit,
+            monthly_rent,
+            area,
+            floor,
+            beopjungdong,
+            deal_type,
+            property_type,
+            deal_ym,
+            build_year,
+            ST_X(location)    AS lon,
+            ST_Y(location)    AS lat
+        FROM real_estate_sales
+        WHERE id = #{propertyId}
+        LIMIT 1
+    </select>
+
+</mapper>

@@ -17,6 +17,13 @@ repositories {
 	mavenCentral()
 }
 
+// Spring AI 1.0.0 GA BOM (Maven Central, 추가 레포 불필요)
+dependencyManagement {
+	imports {
+		mavenBom 'org.springframework.ai:spring-ai-bom:1.0.0'
+	}
+}
+
 dependencies {
 	// 1. 비즈니스 로직 (Core & Web)
 	implementation 'org.springframework.boot:spring-boot-starter-web'
@@ -41,19 +48,24 @@ dependencies {
 	// 5. Redis (토큰 상태 관리 — §10 RT/AT Blacklist)
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 
-	// 6. 개발 편의 도구
+	// 6. AI (Spring AI 1.0.0 GA — AGENTS.md §3 확정)
+	// 1.0.0 GA에서 아티팩트명 변경: spring-ai-openai-spring-boot-starter → spring-ai-starter-model-openai
+	// RestTemplate 직접 LLM 호출 금지. ChatClient + @Tool 구조만 허용.
+	implementation 'org.springframework.ai:spring-ai-starter-model-openai'
+
+	// 7. 개발 편의 도구
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.2' // Swagger
 	implementation 'io.github.cdimascio:dotenv-java:3.0.0' // .env 환경변수 로더
+	implementation 'com.fasterxml.jackson.core:jackson-databind' // JSON 직렬화 (AiSummary)
 
-
-	// 6. Lombok
+	// 8. Lombok
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'
 	testCompileOnly 'org.projectlombok:lombok'
 	testAnnotationProcessor 'org.projectlombok:lombok'
 
-	// 7. 테스트
+	// 9. 테스트
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'org.springframework.security:spring-security-test'
 	testImplementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter-test:3.0.3' // MyBatis 전용 테스트
@@ -64,5 +76,3 @@ dependencies {
 tasks.named('test') {
 	useJUnitPlatform()
 }
-
-
