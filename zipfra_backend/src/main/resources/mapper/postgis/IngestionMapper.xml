@@ -67,4 +67,19 @@
              #{centerLon}, #{centerLat}, #{dealCount}, #{avgAmount}, #{maxAmount})
     </insert>
 
+    <!-- 추이: 동일 지역·월 적재분 삭제(재적재 멱등) -->
+    <delete id="deletePriceHistory">
+        DELETE FROM building_price_history WHERE lawd_cd = #{lawdCd} AND deal_ym = #{dealYm}
+    </delete>
+
+    <!-- 추이: 단지·거래유형·월별 평균가 upsert -->
+    <insert id="upsertPriceHistory">
+        INSERT INTO building_price_history
+            (building_name, lawd_cd, deal_type, deal_ym, avg_amount, deal_count)
+        VALUES
+            (#{buildingName}, #{lawdCd}, #{dealType}, #{dealYm}, #{avgAmount}, #{dealCount})
+        ON CONFLICT (building_name, lawd_cd, deal_type, deal_ym)
+        DO UPDATE SET avg_amount = EXCLUDED.avg_amount, deal_count = EXCLUDED.deal_count
+    </insert>
+
 </mapper>

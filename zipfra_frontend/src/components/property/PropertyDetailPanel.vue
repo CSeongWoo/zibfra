@@ -42,12 +42,29 @@
           </div>
         </div>
 
-        <!-- 실거래가 추이 (placeholder) -->
+        <!-- 실거래가 추이 (월별 평균가, building_price_history) -->
         <div class="card trend">
-          <div class="card-title">📈 실거래가 추이</div>
-          <div class="trend-placeholder">
-            <span>추이 데이터 준비 중</span>
-            <small>현재 단일 월(2024.05) 데이터만 적재되어 있습니다</small>
+          <div class="card-title">📈 실거래가 추이 <em v-if="trend.length">· {{ dealLabel(p.dealType) }}</em></div>
+          <div v-if="trend.length >= 2" class="trend-chart">
+            <div class="chart-body">
+              <div class="chart-yaxis">
+                <span v-for="(t, i) in yTicks" :key="i" class="ytick" :style="{ top: yPix(t) + 'px' }">{{ formatManwon(t) }}</span>
+              </div>
+              <div class="chart-plot">
+                <svg viewBox="0 0 320 130" class="chart-svg" preserveAspectRatio="none">
+                  <line v-for="(t, i) in yTicks" :key="'g' + i" x1="0" :y1="yPix(t)" x2="320" :y2="yPix(t)" stroke="#eef0f4" stroke-width="1" vector-effect="non-scaling-stroke" />
+                  <polyline :points="chartLine" fill="none" stroke="#2563eb" stroke-width="2" vector-effect="non-scaling-stroke" />
+                  <circle v-for="(pt, i) in chartPts" :key="i" :cx="pt.x" :cy="pt.y" r="3" fill="#2563eb" vector-effect="non-scaling-stroke" />
+                </svg>
+                <div class="chart-x">
+                  <span v-for="(pt, i) in chartPts" :key="i" class="xtick" :style="xLabelStyle(i)">{{ ymLabel(trend[i].dealYm) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-else class="trend-placeholder">
+            <span>추이 데이터 없음</span>
+            <small>이 단지·거래유형의 월별 거래가 아직 적재되지 않았습니다</small>
           </div>
         </div>
 
@@ -136,9 +153,10 @@ import { useRouter } from 'vue-router';
 import { useMapStore } from '@/stores/map';
 import { useAuthStore } from '@/stores/auth';
 import { totalScore, groupScore, scoreColor, GROUPS } from '@/utils/score';
-import { dealLabel, typeLabel, priceLabel } from '@/utils/price';
+import { dealLabel, typeLabel, priceLabel, formatManwon } from '@/utils/price';
 import { getReviews, createReview, getReviewSummary } from '@/api/review';
 import { fetchPois } from '@/api/pois';
+import { fetchPriceTrend } from '@/api/trend';
 
 const props = defineProps({
   property: { type: Object, required: true },
@@ -306,6 +324,65 @@ async function submitReview() {
   }
 }
 
+// ===== 실거래가 추이(월별 평균가) =====
+const trend = ref([]); // [{ dealYm, avgAmount, dealCount }]
+async function loadTrend() {
+  try {
+    trend.value = (await fetchPriceTrend(p.value.id)) ?? [];
+  } catch (e) {
+    trend.value = [];
+  }
+}
+const CHART_W = 320, CHART_H = 130, PAD = 14;
+const trendMin = computed(() => (trend.value.length ? Math.min(...trend.value.map((x) => x.avgAmount)) : 0));
+const trendMax = computed(() => (trend.value.length ? Math.max(...trend.value.map((x) => x.avgAmount)) : 0));
+
+// "예쁜" 눈금 산출(4.5억/2.1억 → 5억~2억, 1억 간격)
+function niceNum(range, round) {
+  const exp = Math.floor(Math.log10(range || 1));
+  const frac = (range || 1) / Math.pow(10, exp);
+  let nf;
+  if (round) nf = frac < 1.5 ? 1 : frac < 3 ? 2 : frac < 7 ? 5 : 10;
+  else nf = frac <= 1 ? 1 : frac <= 2 ? 2 : frac <= 5 ? 5 : 10;
+  return nf * Math.pow(10, exp);
+}
+const yScale = computed(() => {
+  if (trend.value.length < 2) return { lo: 0, hi: 1, ticks: [] };
+  const min = trendMin.value, max = trendMax.value;
+  if (max <= min) { const m = min || 1; return { lo: 0, hi: m * 2, ticks: [0, m, m * 2] }; }
+  const step = niceNum((max - min) / 3, true);
+  const lo = Math.floor(min / step) * step;
+  const hi = Math.ceil(max / step) * step;
+  const ticks = [];
+  for (let v = lo; v <= hi + step * 0.5; v += step) ticks.push(Math.round(v));
+  return { lo, hi, ticks };
+});
+const yTicks = computed(() => yScale.value.ticks);
+function yPix(v) {
+  const { lo, hi } = yScale.value;
+  const range = hi - lo || 1;
+  return CHART_H - PAD - ((v - lo) / range) * (CHART_H - 2 * PAD);
+}
+const chartPts = computed(() => {
+  const d = trend.value;
+  if (d.length < 2) return [];
+  return d.map((x, i) => ({
+    x: (i / (d.length - 1)) * CHART_W,
+    y: yPix(x.avgAmount),
+  }));
+});
+const chartLine = computed(() => chartPts.value.map((pt) => `${pt.x.toFixed(1)},${pt.y.toFixed(1)}`).join(' '));
+const ymLabel = (ym) => `${ym.slice(2, 4)}.${ym.slice(4, 6)}`;
+// 각 라벨을 해당 점 x좌표 아래에 정렬(양끝은 안쪽으로)
+function xLabelStyle(i) {
+  const n = trend.value.length;
+  const pct = n > 1 ? (i / (n - 1)) * 100 : 50;
+  let transform = 'translateX(-50%)';
+  if (i === 0) transform = 'translateX(0)';
+  else if (i === n - 1) transform = 'translateX(-100%)';
+  return { left: pct + '%', transform };
+}
+
 function reloadPropertyData() {
   const { kakao } = window;
   if (kakao?.maps) {
@@ -313,6 +390,7 @@ function reloadPropertyData() {
   }
   loadReviews();
   loadInfraCounts();
+  loadTrend();
 }
 
 watch(() => props.property.id, () => {
@@ -448,6 +526,23 @@ onUnmounted(() => {/* kakao 인스턴스는 컨테이너와 함께 GC */});
 }
 .trend-placeholder span { font-size: 14px; font-weight: 600; }
 .trend-placeholder small { font-size: 11px; opacity: 0.7; }
+
+/* 실거래가 추이 차트 */
+.trend-chart { padding-top: 4px; }
+.chart-body { display: flex; gap: 6px; }
+.chart-yaxis { position: relative; width: 44px; height: 130px; flex: 0 0 44px; }
+.ytick {
+  position: absolute; right: 0; transform: translateY(-50%);
+  font-size: 10px; font-weight: 600; white-space: nowrap;
+  color: var(--text-tertiary, #94a3b8);
+}
+.chart-plot { position: relative; flex: 1; min-width: 0; }
+.chart-svg { width: 100%; height: 130px; display: block; overflow: visible; }
+.chart-x { position: relative; height: 13px; margin-top: 4px; }
+.xtick {
+  position: absolute; top: 0; white-space: nowrap;
+  font-size: 10px; color: var(--text-tertiary, #94a3b8);
+}
 
 /* 리뷰 섹션 */
 .write-btn {

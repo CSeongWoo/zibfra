@@ -12,6 +12,7 @@ import com.example.zipfra.dto.map.MarkerDTO;
 import com.example.zipfra.dto.map.MarkerFilter;
 import com.example.zipfra.dto.map.MarkerResponse;
 import com.example.zipfra.dto.map.PoiMarkerDTO;
+import com.example.zipfra.dto.map.PriceTrendPoint;
 import com.example.zipfra.dto.map.PropertySearchDTO;
 import com.example.zipfra.dto.map.PropertyType;
 import com.example.zipfra.dto.map.RegionSummaryDTO;
@@ -126,6 +127,12 @@ public class MapServiceImpl implements MapService {
                     "limit 는 1~" + SEARCH_MAX_LIMIT + " 입니다: " + limit);
         }
         return markerMapper.searchProperties(q.trim(), limit);
+    }
+
+    @Override
+    @Transactional(transactionManager = "spatialTransactionManager", readOnly = true, propagation = Propagation.SUPPORTS)
+    public List<PriceTrendPoint> getPriceTrend(long propertyId) {
+        return markerMapper.findPriceTrend(propertyId);
     }
 
     @Override

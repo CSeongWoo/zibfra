@@ -38,4 +38,25 @@ public interface IngestionService {
      * @return 집계된 시군구 수
      */
     int ingestRegionSummaryFromApi(String dealYmd);
+
+    /**
+     * 실거래가 추이 적재(좌표·지오코딩 없음). 국토부 1종·1시군구·1월 → 단지·거래유형별 평균가 집계 후
+     * {@code building_price_history} upsert. 차트는 좌표 불필요 → 지오코딩 생략(고속).
+     * @return upsert 한 (단지×거래유형) 행 수
+     */
+    int ingestPriceHistory(String source, String lawdCd, String dealYmd);
+
+    /**
+     * 추이 적재 기간 일괄(한 시군구, fromYmd~toYmd 월 순회 × 소스). (월,소스)별 독립 트랜잭션.
+     * @param sourcesCsv 비면 6종 전부
+     * @return upsert 행 수 합계
+     */
+    int ingestPriceHistoryRange(String lawdCd, String fromYmd, String toYmd, String sourcesCsv);
+
+    /**
+     * 추이 적재 전국(250개 시군구 × fromYmd~toYmd 월 × 소스). 지오코딩 없음.
+     * (시군구,월,소스)별 독립 트랜잭션 + upsert 라 재실행 멱등(쿼터 소진 시 이어서 가능).
+     * @return upsert 행 수 합계
+     */
+    int ingestPriceHistoryNationwide(String fromYmd, String toYmd, String sourcesCsv);
 }

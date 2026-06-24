@@ -6,11 +6,13 @@ import java.util.List;
 import com.example.zipfra.dto.map.MarkerFilter;
 import com.example.zipfra.dto.map.MarkerResponse;
 import com.example.zipfra.dto.map.PoiMarkerDTO;
+import com.example.zipfra.dto.map.PriceTrendPoint;
 import com.example.zipfra.dto.map.PropertySearchDTO;
 import com.example.zipfra.service.MapService;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -66,6 +68,16 @@ public class MapController {
             @RequestParam(required = false) Integer limit) {
 
         List<PropertySearchDTO> body = mapService.searchProperties(q, limit);
+        return ResponseEntity.ok()
+                .header("X-Api-Version", "1")
+                .cacheControl(CacheControl.noStore())
+                .body(body);
+    }
+
+    /** 실거래가 추이 (Public). 매물 id → 그 단지·거래유형 월별 평균가 시계열(building_price_history). */
+    @GetMapping("/property/{id}/trend")
+    public ResponseEntity<List<PriceTrendPoint>> getPriceTrend(@PathVariable long id) {
+        List<PriceTrendPoint> body = mapService.getPriceTrend(id);
         return ResponseEntity.ok()
                 .header("X-Api-Version", "1")
                 .cacheControl(CacheControl.noStore())
