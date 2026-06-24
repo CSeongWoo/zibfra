@@ -45,7 +45,7 @@
         <!-- 실거래가 추이 (월별 평균가, building_price_history) -->
         <div class="card trend">
           <div class="card-title">📈 실거래가 추이 <em v-if="trend.length">· {{ dealLabel(p.dealType) }}</em></div>
-          <div v-if="trend.length >= 2" class="trend-chart">
+          <div v-if="trend.length >= 1" class="trend-chart">
             <div class="chart-body">
               <div class="chart-yaxis">
                 <span v-for="(t, i) in yTicks" :key="i" class="ytick" :style="{ top: yPix(t) + 'px' }">{{ formatManwon(t) }}</span>
@@ -347,9 +347,17 @@ function niceNum(range, round) {
   return nf * Math.pow(10, exp);
 }
 const yScale = computed(() => {
-  if (trend.value.length < 2) return { lo: 0, hi: 1, ticks: [] };
+  if (trend.value.length < 1) return { lo: 0, hi: 1, ticks: [] };
   const min = trendMin.value, max = trendMax.value;
-  if (max <= min) { const m = min || 1; return { lo: 0, hi: m * 2, ticks: [0, m, m * 2] }; }
+  if (max <= min) { 
+    const m = min || 1; 
+    const step = niceNum(m * 0.5, true);
+    const lo = Math.max(0, Math.floor(m / step) * step - step);
+    const hi = Math.ceil(m / step) * step + step;
+    const ticks = [];
+    for (let v = lo; v <= hi + step * 0.5; v += step) ticks.push(Math.round(v));
+    return { lo, hi, ticks };
+  }
   const step = niceNum((max - min) / 3, true);
   const lo = Math.floor(min / step) * step;
   const hi = Math.ceil(max / step) * step;
@@ -365,18 +373,26 @@ function yPix(v) {
 }
 const chartPts = computed(() => {
   const d = trend.value;
-  if (d.length < 2) return [];
+  if (d.length === 0) return [];
+  if (d.length === 1) {
+    return [{ x: CHART_W / 2, y: yPix(d[0].avgAmount) }];
+  }
   return d.map((x, i) => ({
     x: (i / (d.length - 1)) * CHART_W,
     y: yPix(x.avgAmount),
   }));
 });
 const chartLine = computed(() => chartPts.value.map((pt) => `${pt.x.toFixed(1)},${pt.y.toFixed(1)}`).join(' '));
-const ymLabel = (ym) => `${ym.slice(2, 4)}.${ym.slice(4, 6)}`;
+const ymLabel = (ym) => {
+  if (!ym) return '';
+  const s = String(ym);
+  return s.length >= 6 ? `${s.slice(2, 4)}.${s.slice(4, 6)}` : s;
+};
 // 각 라벨을 해당 점 x좌표 아래에 정렬(양끝은 안쪽으로)
 function xLabelStyle(i) {
   const n = trend.value.length;
-  const pct = n > 1 ? (i / (n - 1)) * 100 : 50;
+  if (n === 1) return { left: '50%', transform: 'translateX(-50%)' };
+  const pct = (i / (n - 1)) * 100;
   let transform = 'translateX(-50%)';
   if (i === 0) transform = 'translateX(0)';
   else if (i === n - 1) transform = 'translateX(-100%)';
