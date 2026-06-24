@@ -33,6 +33,11 @@
         VALUES (#{category}, #{name}, ST_SetSRID(ST_MakePoint(#{lng}, #{lat}), 4326))
     </insert>
 
+    <!-- 버스정류장 등 특정 카테고리만 부분 재적재(멱등). clearPoi 와 달리 카카오 POI 보존. -->
+    <delete id="deletePoiByCategory">
+        DELETE FROM poi WHERE category = #{category}
+    </delete>
+
     <!-- region_summary 실집계(§7 줌아웃 SUMMARY) -->
     <delete id="clearRegionSummary">
         DELETE FROM region_summary

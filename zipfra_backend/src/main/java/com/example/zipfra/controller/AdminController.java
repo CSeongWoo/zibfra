@@ -125,6 +125,19 @@ public class AdminController {
                 .body(Map.of("ingested", ingested));
     }
 
+    /**
+     * 버스정류장 공공데이터 적재(§9, A 방식). resources/data/bus_stops.csv(국토부 전국 버스정류장 위치정보)
+     * → poi(BUS_STOP). 카카오 POI 보존(BUS_STOP 만 재적재). <b>poi/nationwide 이후</b> 실행하고,
+     * 이어서 recompute-scores 로 교통 점수(transit_base)를 지하철+버스로 갱신할 것.
+     */
+    @PostMapping("/ingest/bus-stops")
+    public ResponseEntity<Map<String, Object>> ingestBusStops() {
+        int ingested = poiIngestService.ingestBusStops();
+        return ResponseEntity.ok()
+                .header("X-Api-Version", "1")
+                .body(Map.of("ingested", ingested));
+    }
+
     /** 매물 점수 전체 재계산(§5.1). 매물·POI 적재 후 호출 — 최신 POI 기준 base 갱신. */
     @PostMapping("/recompute-scores")
     public ResponseEntity<Map<String, Object>> recomputeScores() {

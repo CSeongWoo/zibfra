@@ -32,7 +32,9 @@ import java.util.Map;
 public class LocationScoreCalculator {
 
     private static final double WALK_METERS_PER_MIN = 80.0;
-    private static final double DECAY_FLAT_MINUTES = 5.0;   // t ≤ 5 → W=1
+    private static final double DECAY_FLAT_MINUTES = 5.0;        // 일반: t ≤ 5분(400m) → W=1
+    // 교통(지하철·버스)은 감쇠 시작을 300m(3.75분)로 앞당김 — 역세권 변별력(2026-06-25).
+    private static final double TRANSIT_FLAT_MINUTES = 3.75;     // 300m / 80m·분⁻¹
 
     /** 계산 결과 묶음 (breakdown 맵 + finalScore). */
     public record CalcResult(Map<String, ScoreResponse.GroupResult> breakdown, double finalScore) {}
@@ -60,7 +62,9 @@ public class LocationScoreCalculator {
             categoriesByGroup
                     .computeIfAbsent(cat.group(), g -> new LinkedHashMap<>())
                     .put(cat.key(), categoryScore);
-            baseByGroup.merge(cat.group(), base, Double::sum);
+            // 그룹 기여 = min(상한, base) × 가중치 (지하철 ×40 / 버스 상한 15, 나머지 그대로). categoryScore 는 raw base 유지.
+            double contribution = Math.min(cat.cap(), base) * cat.weight();
+            baseByGroup.merge(cat.group(), contribution, Double::sum);
         }
 
         Map<String, ScoreResponse.GroupResult> breakdown = new LinkedHashMap<>();
@@ -98,22 +102,24 @@ public class LocationScoreCalculator {
         if (distances.isEmpty()) {
             return 0.0;
         }
+        // 교통 그룹만 감쇠 플랫 구간을 300m(3.75분)로 단축. 나머지(교육·상업·편의)는 400m(5분) 유지.
+        double flatMin = (cat.group() == Category.Group.TRANSIT) ? TRANSIT_FLAT_MINUTES : DECAY_FLAT_MINUTES;
         if (cat.model() == Category.Model.ONE_IS_ENOUGH) {
-            return decay(Collections.min(distances));   // 가장 가까운 1개의 W만
+            return decay(Collections.min(distances), flatMin);   // 가장 가까운 1개의 W만
         }
         double sum = 0.0;
         for (double meters : distances) {
-            sum += decay(meters);
+            sum += decay(meters, flatMin);
         }
         return sum;
     }
 
-    private double decay(double meters) {
+    private double decay(double meters, double flatMinutes) {
         double t = meters / WALK_METERS_PER_MIN;
-        if (t <= DECAY_FLAT_MINUTES) {
+        if (t <= flatMinutes) {
             return 1.0;
         }
-        double ratio = t / DECAY_FLAT_MINUTES;
+        double ratio = t / flatMinutes;
         return 1.0 / (ratio * ratio);
     }
 

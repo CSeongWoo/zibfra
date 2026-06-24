@@ -27,16 +27,29 @@ class LocationScoreCalculatorTest {
     }
 
     @Test
-    @DisplayName("T-7: subway 1개 320m → base 1.000 (one_is_enough, t=4.0≤5→W=1)")
+    @DisplayName("T-7: subway 320m → 카테고리 raw base 0.879, 그룹 기여는 ×40 가중 = 35.156")
     void transit_oneIsEnough_subway() {
         var result = calculator.calculate(
                 List.of(poi("SUBWAY", 320)),
                 Map.of("transit", 1.0));
 
         ScoreResponse.GroupResult transit = result.breakdown().get("transit");
-        assertThat(transit.categories().get("subway").base()).isEqualTo(1.0);
-        assertThat(transit.score()).isEqualTo(1.000);
-        assertThat(result.finalScore()).isEqualTo(1.000);
+        // 카테고리 base 는 raw W 유지(교통 flat 300m → 320m W=(3.75/4)²≈0.879)
+        assertThat(transit.categories().get("subway").base()).isCloseTo(0.8789, within(0.0001));
+        // 그룹 기여 = base × 지하철 가중 40 → 35.156 (역세권 우대)
+        assertThat(transit.score()).isCloseTo(35.156, within(0.01));
+        assertThat(result.finalScore()).isCloseTo(35.156, within(0.01));
+    }
+
+    @Test
+    @DisplayName("교통: 지하철 ×40 가중 + 버스 ΣW 상한 15 (역세권 우대·버스 인플레 방지)")
+    void transit_subwayWeight_busCap() {
+        java.util.List<PoiDistanceDTO> pois = new java.util.ArrayList<>();
+        pois.add(poi("SUBWAY", 300));                          // W=1.0 → ×40 = 40
+        for (int i = 0; i < 20; i++) pois.add(poi("BUS_STOP", 100)); // 20개×W1.0=ΣW 20 → 상한 15
+        var result = calculator.calculate(pois, Map.of("transit", 1.0));
+        // 그룹 base = 지하철 40 + 버스 min(15, 20) = 55
+        assertThat(result.breakdown().get("transit").base()).isCloseTo(55.0, within(0.01));
     }
 
     @Test
@@ -70,12 +83,16 @@ class LocationScoreCalculatorTest {
     }
 
     @Test
-    @DisplayName("경계: t=5.0(=400m) 정확히 → W=1.0 (≤5 분기)")
-    void decayBoundary_exactlyFiveMinutes() {
+    @DisplayName("경계: 교통 300m·일반 400m 가 각 그룹의 flat 경계(W=1.0)")
+    void decayBoundaries_perGroup() {
         var result = calculator.calculate(
-                List.of(poi("SUBWAY", 400)),
-                Map.of("transit", 1.0));
+                List.of(poi("SUBWAY", 300), poi("MART", 400)),
+                Map.of("transit", 1.0, "commerce", 1.0));
+        // 교통 flat 3.75분(300m): 300m=경계 → W=1.0
         assertThat(result.breakdown().get("transit").categories().get("subway").base())
+                .isEqualTo(1.0);
+        // 일반(상업) flat 5분(400m): 400m=경계 → W=1.0 (교통 외엔 종전 유지)
+        assertThat(result.breakdown().get("commerce").categories().get("mart").base())
                 .isEqualTo(1.0);
     }
 
@@ -90,7 +107,7 @@ class LocationScoreCalculatorTest {
                 result.breakdown().get("transit").categories().get("subway");
         assertThat(subway.count()).isEqualTo(2);
         assertThat(subway.nearestMeters()).isEqualTo(320);
-        assertThat(subway.base()).isEqualTo(1.0);   // 320m 만 반영, 1200m 무시
+        assertThat(subway.base()).isCloseTo(0.8789, within(0.0001));   // 320m 만 반영(교통 flat 300m → W<1), 1200m 무시
     }
 
     @Test
@@ -117,13 +134,13 @@ class LocationScoreCalculatorTest {
 
         assertThat(result.breakdown().keySet())
                 .containsExactlyInAnyOrder("transit", "education", "commerce", "convenience");
-        // transit: subway W=1.0 → 1.000
-        assertThat(result.breakdown().get("transit").score()).isEqualTo(1.000);
-        // commerce: restaurant Σ=1.4444, w=0.9 → 1.300
+        // transit: subway 320m raw W=0.879 × 지하철가중 40 = 35.156
+        assertThat(result.breakdown().get("transit").score()).isCloseTo(35.156, within(0.01));
+        // commerce: restaurant Σ=1.4444(일반 flat 400m·가중 1 유지), w=0.9 → 1.300
         assertThat(result.breakdown().get("commerce").categories().get("restaurant").base())
                 .isCloseTo(1.4444, within(0.0001));
         assertThat(result.breakdown().get("commerce").score()).isEqualTo(1.300);
-        assertThat(result.finalScore()).isEqualTo(2.300);
+        assertThat(result.finalScore()).isCloseTo(36.456, within(0.01));   // 35.156 + 1.300
     }
 
     @Test
