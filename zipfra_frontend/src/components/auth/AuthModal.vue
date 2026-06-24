@@ -17,18 +17,26 @@
           <!-- Tabs -->
           <div class="flex bg-primary/[0.03] p-1.5 rounded-md mb-6">
             <button
+              v-if="!isForgotPassword"
               class="flex-1 p-2.5 border-none bg-transparent text-[15px] font-semibold text-primary/60 rounded cursor-pointer transition-all duration-250"
               :class="isLogin ? 'bg-white text-primary shadow-level-1' : ''"
-              @click="isLogin = true"
+              @click="isLogin = true; errorMessage = ''; successMessage = ''"
             >
               로그인
             </button>
             <button
+              v-if="!isForgotPassword"
               class="flex-1 p-2.5 border-none bg-transparent text-[15px] font-semibold text-primary/60 rounded cursor-pointer transition-all duration-250"
               :class="!isLogin ? 'bg-white text-primary shadow-level-1' : ''"
-              @click="isLogin = false"
+              @click="isLogin = false; errorMessage = ''; successMessage = ''"
             >
               회원가입
+            </button>
+            <button
+              v-if="isForgotPassword"
+              class="flex-1 p-2.5 border-none bg-white text-primary shadow-level-1 text-[15px] font-semibold rounded cursor-default"
+            >
+              비밀번호 찾기
             </button>
           </div>
 
@@ -74,25 +82,38 @@
             </Transition>
 
             <!-- Password Field -->
-            <div class="flex flex-col gap-1">
-              <Input
-                label="비밀번호"
-                id="password"
-                v-model="form.password"
-                type="password"
-                placeholder="••••••••"
-                required
-              />
-              <span v-if="!isLogin" class="text-[12px] text-primary/60 leading-[1.4] mt-1">
-                8자 이상, 영문, 숫자, 특수문자를 각각 최소 1자 이상 포함해야 합니다.
-              </span>
-            </div>
+            <Transition name="fade">
+              <div v-if="!isForgotPassword" class="flex flex-col gap-1">
+                <Input
+                  label="비밀번호"
+                  id="password"
+                  v-model="form.password"
+                  type="password"
+                  placeholder="••••••••"
+                  required
+                />
+                <span v-if="!isLogin" class="text-[12px] text-primary/60 leading-[1.4] mt-1">
+                  8자 이상, 영문, 숫자, 특수문자를 각각 최소 1자 이상 포함해야 합니다.
+                </span>
+                <div v-if="isLogin" class="text-right mt-1">
+                  <button type="button" class="text-[12px] text-info hover:underline bg-transparent border-none cursor-pointer p-0" @click="isForgotPassword = true; errorMessage = ''; successMessage = ''">
+                    비밀번호를 잊으셨나요?
+                  </button>
+                </div>
+              </div>
+            </Transition>
 
             <!-- Submit Button -->
             <Button variant="primary" type="submit" class="w-full mt-2 py-3 flex justify-center items-center" :disabled="authStore.loading">
               <span v-if="authStore.loading" class="w-5 h-5 border-2 border-white/30 rounded-full border-t-white animate-spin"></span>
-              <span v-else>{{ isLogin ? '로그인' : '회원가입 완료' }}</span>
+              <span v-else>{{ isForgotPassword ? '임시 비밀번호 발급' : isLogin ? '로그인' : '회원가입 완료' }}</span>
             </Button>
+            
+            <div v-if="isForgotPassword" class="text-center mt-2">
+              <button type="button" class="text-[13px] text-primary/60 hover:text-primary bg-transparent border-none cursor-pointer underline" @click="isForgotPassword = false; errorMessage = ''; successMessage = ''">
+                로그인으로 돌아가기
+              </button>
+            </div>
           </form>
         </Card>
       </Transition>
@@ -119,6 +140,7 @@ const emit = defineEmits(['close']);
 const authStore = useAuthStore();
 
 const isLogin = ref(true);
+const isForgotPassword = ref(false);
 const errorMessage = ref('');
 const successMessage = ref('');
 
@@ -135,15 +157,13 @@ watch(() => props.isOpen, (val) => {
   }
 });
 
-watch(isLogin, () => {
-  errorMessage.value = '';
-  successMessage.value = '';
-});
+// Removed watcher to prevent clearing messages when switching state programmatically.
 
 function resetForm() {
   form.email = '';
   form.password = '';
   form.nickname = '';
+  isForgotPassword.value = false;
   errorMessage.value = '';
   successMessage.value = '';
 }
@@ -152,13 +172,30 @@ function validatePassword(password) {
   const minLength = 8;
   const hasLetter = /[A-Za-z]/.test(password);
   const hasDigit = /\d/.test(password);
-  const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
+  const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~]/.test(password);
   return password.length >= minLength && hasLetter && hasDigit && hasSpecial;
 }
 
 async function handleSubmit() {
   errorMessage.value = '';
   successMessage.value = '';
+
+  if (isForgotPassword.value) {
+    if (!form.email) {
+      errorMessage.value = '이메일을 입력해주세요.';
+      return;
+    }
+    try {
+      const tempPw = await authStore.forgotPassword(form.email);
+      successMessage.value = `임시 비밀번호가 발급되었습니다: ${tempPw}`;
+      form.password = '';
+      isForgotPassword.value = false;
+      isLogin.value = true;
+    } catch (err) {
+      errorMessage.value = err.response?.data?.message || err.message || '임시 비밀번호 발급에 실패했습니다.';
+    }
+    return;
+  }
 
   if (!isLogin.value) {
     if (!validatePassword(form.password)) {
@@ -176,14 +213,14 @@ async function handleSubmit() {
       isLogin.value = true;
       form.password = ''; // Clear password, keep email for convenience
     } catch (err) {
-      errorMessage.value = err.message || '회원가입에 실패했습니다. 다시 시도해주세요.';
+      errorMessage.value = err.response?.data?.message || err.message || '회원가입에 실패했습니다. 다시 시도해주세요.';
     }
   } else {
     try {
       await authStore.login(form.email, form.password);
       emit('close');
     } catch (err) {
-      errorMessage.value = err.message || '로그인에 실패했습니다. 이메일과 비밀번호를 확인해주세요.';
+      errorMessage.value = err.response?.data?.message || err.message || '로그인에 실패했습니다. 이메일과 비밀번호를 확인해주세요.';
     }
   }
 }

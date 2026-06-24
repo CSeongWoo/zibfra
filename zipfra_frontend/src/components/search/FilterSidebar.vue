@@ -22,6 +22,7 @@
         <div class="auth-area">
           <template v-if="authStore.isAuthenticated">
             <span class="greeting">{{ authStore.currentUser?.nickname }}님</span>
+            <button class="auth-btn secondary" @click="isProfileModalOpen = true">정보 수정</button>
             <button class="auth-btn secondary" @click="handleLogout" :disabled="authStore.loading">로그아웃</button>
           </template>
           <template v-else>
@@ -112,6 +113,13 @@
       </div>
     </div>
   </aside>
+
+  <!-- 프로필 모달 (정보 수정 및 탈퇴) -->
+  <ProfileModal
+    v-if="isProfileModalOpen"
+    :is-open="isProfileModalOpen"
+    @close="isProfileModalOpen = false"
+  />
 </template>
 
 <script setup>
@@ -121,12 +129,15 @@ import { useMapStore } from '@/stores/map';
 import { useAuthStore } from '@/stores/auth';
 import { PERSONA_PRESETS, GROUPS } from '@/utils/score';
 import { PRICE_MAX_IDX, idxToPrice, priceToIdx, formatManwon, priceFilterLabel } from '@/utils/price';
+import ProfileModal from '@/components/auth/ProfileModal.vue';
 
 const mapStore = useMapStore();
 const authStore = useAuthStore();
 const router = useRouter();
 const filter = computed(() => mapStore.filter);
 const persona = computed(() => mapStore.persona);
+
+const isProfileModalOpen = ref(false);
 
 function goToLogin() {
   router.push('/login');
@@ -307,6 +318,9 @@ function onPreset(p) {
 }
 
 .auth-btn.secondary {
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
   background: transparent;
   color: #44474c;
   border: 1px solid #c4c6cd;

@@ -1,5 +1,7 @@
 package com.example.zipfra.web;
 
+import com.example.zipfra.dto.auth.ForgotPasswordRequest;
+import com.example.zipfra.dto.auth.ForgotPasswordResponse;
 import com.example.zipfra.dto.auth.LoginRequest;
 import com.example.zipfra.dto.auth.SignupRequest;
 import com.example.zipfra.dto.auth.TokenDto;
@@ -97,6 +99,15 @@ public class AuthController {
         setRefreshTokenCookie(response, "", 0);
 
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * AUTH-05 비밀번호 찾기 (임시 비밀번호 발급)
+     */
+    @PostMapping("/forgot-password")
+    public ResponseEntity<ForgotPasswordResponse> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        String tempPassword = authService.forgotPassword(request.getEmail());
+        return ResponseEntity.ok(new ForgotPasswordResponse(tempPassword));
     }
 
     private void setRefreshTokenCookie(HttpServletResponse response, String refreshToken, long maxAgeSeconds) {

@@ -43,6 +43,8 @@ public class AuthService {
                 .email(request.getEmail())
                 .password(hashedPassword)
                 .nickname(request.getNickname())
+                .role("USER")
+                .isActive(true)
                 .build();
 
         userMapper.insertUser(user);
@@ -60,7 +62,7 @@ public class AuthService {
             throw new ApiException(ErrorCode.TOKEN_INVALID, HttpStatus.UNAUTHORIZED.getReasonPhrase());
         }
 
-        String accessToken = jwtUtil.generateAccessToken(user.getId(), user.getEmail());
+        String accessToken = jwtUtil.generateAccessToken(user.getId(), user.getEmail(), user.getRole());
         String refreshToken = jwtUtil.generateRefreshToken(user.getId());
 
         // Redis rt:{userId} 저장 (14일 TTL)
@@ -108,7 +110,7 @@ public class AuthService {
                 .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
 
         // 새로운 토큰 쌍 발급
-        String newAccessToken = jwtUtil.generateAccessToken(user.getId(), user.getEmail());
+        String newAccessToken = jwtUtil.generateAccessToken(user.getId(), user.getEmail(), user.getRole());
         String newRefreshToken = jwtUtil.generateRefreshToken(user.getId());
 
         // Redis 갱신 (14일 TTL)
@@ -131,5 +133,22 @@ public class AuthService {
             String blKey = "bl:" + accessToken;
             redisTemplate.opsForValue().set(blKey, "logout", remainingMs, TimeUnit.MILLISECONDS);
         }
+    }
+
+    /**
+     * AUTH-05 비밀번호 찾기 (임시 비밀번호 발급)
+     */
+    @Transactional(transactionManager = "primaryTransactionManager")
+    public String forgotPassword(String email) {
+        User user = userMapper.findByEmail(email)
+                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND));
+
+        // 8자리 임시 비밀번호 생성
+        String tempPassword = java.util.UUID.randomUUID().toString().substring(0, 8);
+        String hashedPassword = passwordEncoder.encode(tempPassword);
+
+        userMapper.updatePasswordByEmail(email, hashedPassword);
+
+        return tempPassword;
     }
 }

@@ -606,9 +606,12 @@ function upsertCache(summaryType, targetId, targetType, payload):
 | AUTH-02 | `POST` | `/api/v1/auth/login` | Public | MySQL + Redis(RT) / 없음 | AT 30분+RT 14일 발급, Redis `rt:{userId}` SET; 자격 실패는 사용자 열거 방지 동일 에러(`401 TOKEN_INVALID`) |
 | AUTH-03 | `POST` | `/api/v1/auth/refresh` | Public(RT 검증) | Redis / 없음 | RTR(§10.2): 구 RT 삭제+신규 AT/RT 발급; 불일치=탈취의심 즉시 삭제 |
 | AUTH-04 | `POST` | `/api/v1/auth/logout` | Protected | Redis / 없음 | `rt:{userId}` DEL + `bl:{accessToken}` SET(TTL=AT 잔여); `204` |
+| AUTH-05 | `POST` | `/api/v1/auth/forgot-password` | Public | MySQL(쓰기) / 없음 | 이메일 확인 후 임시 비밀번호 발급 또는 재설정 토큰 응답 로직 |
 | USER-01 | `GET` | `/api/v1/users/me` | Protected | MySQL / 없음 | 프로필 조회 |
-| USER-02 | `PATCH` | `/api/v1/users/me` | Protected | MySQL(쓰기) / 없음 | `nickname`(2~20)만 수정, email 변경 불가 |
-| USER-03 | `DELETE` | `/api/v1/users/me` | Protected | MySQL(쓰기)+Redis / 없음 | 탈퇴+로그아웃(RT/AT 무효화); 리뷰·즐겨찾기 soft delete/anonymize(별도 설계안); `204` |
+| USER-02 | `PATCH` | `/api/v1/users/me` | Protected | MySQL(쓰기) / 없음 | 본인의 닉네임 및 비밀번호 변경 로직; email 변경 불가 |
+| USER-03 | `DELETE` | `/api/v1/users/me` | Protected | MySQL(쓰기)+Redis / 없음 | 로그인한 사용자 본인의 계정 탈퇴 처리; DELETE 쿼리 수행 금지, 반드시 `is_active = false`로 업데이트 (Soft Delete); `204` |
+| USER-04 | `GET` | `/api/v1/users/search` | Protected | MySQL / 없음 | 특정 닉네임으로 유저 검색 (Like 검색 등) |
+| ADMIN-01 | `DELETE` | `/api/v1/admin/users/{userId}` | Admin | MySQL(쓰기)+Redis / 없음 | 관리자 권한으로 특정 악성 유저 강제 삭제 처리; DELETE 쿼리 수행 금지, 반드시 `is_active = false`로 업데이트 (Soft Delete); `204` |
 | REV-01 | `GET` | `/api/v1/reviews` | Public(선택) | MySQL / 없음 | `targetType`=`BUILDING`\|`AREA`, `targetId`; 최신순; `size` max 50/def 20 |
 | REV-02 | `POST` | `/api/v1/reviews` | Protected | MySQL(쓰기) / 없음 | `rating`[1,5], `content` 10~500자; 1인 1리뷰; 저장 후 `ai_summaries` 무효화(§6.5); `201` |
 | REV-03 | `PATCH` | `/api/v1/reviews/{reviewId}` | Protected | MySQL(쓰기) / 없음 | 본인만; `rating`/`content` 부분수정(하나 이상 필수) |

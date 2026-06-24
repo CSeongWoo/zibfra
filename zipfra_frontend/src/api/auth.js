@@ -34,3 +34,10 @@ export function logout() {
 export function getProfile() {
   return http.get('/users/me');
 }
+
+/**
+ * AUTH-05 비밀번호 찾기 (임시 비밀번호 발급)
+ */
+export function forgotPassword(forgotData) {
+  return http.post('/auth/forgot-password', forgotData);
+}
