@@ -58,18 +58,25 @@ export const useMapStore = defineStore('map', () => {
     zoomReq.value = { delta };
   }
 
-  // 인프라 표시 토글(와이어3 좌측). 그룹별 POI 오버레이 on/off (MAP-02).
-  const infraLayers = ref({ transit: true, education: true, commerce: true, convenience: true });
+  // 좌측 필터 사이드바 열림 상태. 좌하단 범례가 이 상태에 따라 좌우 이동(사이드바 폭 반영).
+  const sidebarOpen = ref(true);
 
-  function toggleInfra(key) {
-    infraLayers.value = { ...infraLayers.value, [key]: !infraLayers.value[key] };
+  function toggleSidebar() {
+    sidebarOpen.value = !sidebarOpen.value;
   }
 
-  // MAP-02 POI 오버레이 마커(켜진 그룹의 POI). DETAIL 에서만 채움.
-  const pois = ref([]);
+  // 우측 매물 목록 패널(기능4). 평소엔 숨김 → 클러스터(동일좌표) 마커 클릭 시 그 단지 매물들을 표시.
+  const listOpen = ref(false);
+  const listItems = ref([]); // 클릭한 클러스터의 매물 배열(MarkerDTO[])
 
-  function setPois(next) {
-    pois.value = Array.isArray(next) ? next : [];
+  function openList(items) {
+    listItems.value = Array.isArray(items) ? items : [];
+    listOpen.value = true;
+  }
+
+  function closeList() {
+    listOpen.value = false;
+    listItems.value = [];
   }
 
   // 페르소나 그룹 가중치(#6, §5.1 표시 단계). base 사전계산값에 실시간 곱 → 마커/목록 점수 갱신.
@@ -95,8 +102,9 @@ export const useMapStore = defineStore('map', () => {
   }
 
   return {
-    bbox, zoom, strategy, filter, persona, markers, regions, moveTarget, infraLayers, zoomReq, pois,
+    bbox, zoom, strategy, filter, persona, markers, regions, moveTarget, zoomReq,
+    sidebarOpen, listOpen, listItems,
     setViewport, setStrategy, setFilter, toggleFilterValue, setPersona, setMarkers, setRegions,
-    requestMove, toggleInfra, requestZoom, setPois,
+    requestMove, requestZoom, toggleSidebar, openList, closeList,
   };
 });

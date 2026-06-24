@@ -1,25 +1,22 @@
 <template>
   <!--
-    와이어3 우측 매물 목록. store.markers 를 종합점수(페르소나 반영) 내림차순으로 카드 표시.
-    반응형 토글 지원: 토글 탭으로 접기/펼치기.
-    카드 클릭 → select(id)(§7.4 단방향). 하트는 FAV API 영역(후속).
+    우측 매물 목록(기능4). 클러스터(동일좌표) 마커 클릭 시 부모가 v-if 로 띄운다.
+    props.items 를 종합점수(페르소나 반영) 내림차순으로 카드 표시.
+    카드 클릭 → select(id) → 상세페이지(§7.4 단방향). 닫기 → close. 하트는 FAV API 영역(후속).
   -->
-  <aside class="list-panel" :class="{ collapsed: !open }" v-if="sorted.length || true">
-    <!-- 토글 탭 -->
-    <button class="toggle-tab" @click="open = !open" :title="open ? '목록 접기' : '목록 펼치기'">
-      <span>{{ open ? '▶' : '◀' }}</span>
-    </button>
-
-    <div class="panel-inner" v-show="open">
+  <aside class="list-panel">
+    <div class="panel-inner">
       <div class="head">
         <h3>📋 매물 목록</h3>
-        <span class="count" v-if="sorted.length">{{ sorted.length }}건</span>
-        <span class="count" v-else>0건</span>
+        <div class="head-right">
+          <span class="count">{{ sorted.length }}건</span>
+          <button class="close-btn" @click="emit('close')" title="목록 닫기">✕</button>
+        </div>
       </div>
 
       <div v-if="sorted.length === 0" class="empty-state">
         <span>🔍</span>
-        <p>지도를 이동하거나<br>필터를 조정해 보세요</p>
+        <p>표시할 매물이 없습니다</p>
       </div>
 
       <ul v-else class="rows">
@@ -57,17 +54,17 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { computed } from 'vue';
 import { useMapStore } from '@/stores/map';
 import { totalScore, scoreColor, groupScore, GROUPS } from '@/utils/score';
 import { dealLabel, typeLabel, priceLabel } from '@/utils/price';
 
-const emit = defineEmits(['select']);
+const props = defineProps({ items: { type: Array, default: () => [] } });
+const emit = defineEmits(['select', 'close']);
 const mapStore = useMapStore();
-const open = ref(true); // 기본 펼침
 
 const sorted = computed(() =>
-  [...mapStore.markers].sort((a, b) => totalScore(b, mapStore.persona) - totalScore(a, mapStore.persona)),
+  [...props.items].sort((a, b) => totalScore(b, mapStore.persona) - totalScore(a, mapStore.persona)),
 );
 const scoreOf = (m) => totalScore(m, mapStore.persona);
 </script>
@@ -85,12 +82,12 @@ const scoreOf = (m) => totalScore(m, mapStore.persona);
   border-left: 1px solid #c4c6cd;
   box-shadow: 0px 4px 12px rgba(26, 43, 60, 0.05);
   display: flex;
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: slide-in-right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.list-panel.collapsed {
-  width: 0;
-  border-left: none;
+@keyframes slide-in-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
 }
 
 /* 내부 컨텐츠 */
@@ -101,34 +98,6 @@ const scoreOf = (m) => totalScore(m, mapStore.persona);
   flex-direction: column;
   overflow: hidden;
   height: 100%;
-}
-
-/* 토글 탭 */
-.toggle-tab {
-  position: absolute;
-  top: 50%;
-  left: -30px;
-  transform: translateY(-50%);
-  z-index: 9;
-  width: 30px;
-  height: 56px;
-  background: #ffffff;
-  border: 1px solid #c4c6cd;
-  border-right: none;
-  border-radius: 8px 0 0 8px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  color: #44474c;
-  box-shadow: -2px 0 6px rgba(26, 43, 60, 0.06);
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.toggle-tab:hover {
-  background: #fff5ec;
-  color: #944a00;
 }
 
 /* 헤더 */
@@ -147,12 +116,35 @@ const scoreOf = (m) => totalScore(m, mapStore.persona);
   color: #041627;
 }
 
+.head-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .count {
   font-size: 12px;
   color: #74777d;
   background: #f3f4f5;
   padding: 2px 10px;
   border-radius: 9999px;
+}
+
+.close-btn {
+  background: transparent;
+  border: none;
+  color: #74777d;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 8px;
+  transition: all 0.15s ease;
+}
+
+.close-btn:hover {
+  background: #fff5ec;
+  color: #944a00;
 }
 
 /* 빈 상태 */

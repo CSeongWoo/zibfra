@@ -7,7 +7,7 @@
   <KakaoMap
     :markers="mapStore.markers"
     @viewport-change="onViewport"
-    @marker-click="(propertyId) => emit('marker-click', propertyId)"
+    @marker-click="(items) => emit('marker-click', items)"
     @map-click="(coord) => emit('map-click', coord)"
   />
 </template>
@@ -17,7 +17,6 @@ import { ref, watch } from 'vue';
 import KakaoMap from '@/components/map/KakaoMap.vue';
 import { useMapStore } from '@/stores/map';
 import { fetchMarkers } from '@/api/markers';
-import { fetchPois } from '@/api/pois';
 
 const emit = defineEmits(['marker-click', 'viewport-change', 'map-click']);
 
@@ -54,33 +53,13 @@ async function loadMarkers() {
     } else {
       mapStore.setRegions(data.regions ?? []);
       mapStore.setMarkers([]);
+      mapStore.closeList(); // 줌아웃(SUMMARY) 전환 시 우측 목록 닫기(기능4)
     }
   } catch (e) {
     // 공통 에러 계약(§8.3): { error, message, timestamp, status }
     console.error('[MAP-01] markers 조회 실패:', e.error, e.message);
     mapStore.setMarkers([]);
     mapStore.setRegions([]);
-  }
-  loadPois(); // MAP-01 전략 확정 후 POI 오버레이 갱신
-}
-
-// MAP-02: DETAIL + 켜진 인프라 그룹의 POI 오버레이 조회. SUMMARY·토글 전무면 비움.
-async function loadPois() {
-  if (!lastBbox.value || mapStore.strategy !== 'DETAIL') {
-    mapStore.setPois([]);
-    return;
-  }
-  const on = Object.entries(mapStore.infraLayers).filter(([, v]) => v).map(([k]) => k);
-  if (!on.length) {
-    mapStore.setPois([]);
-    return;
-  }
-  try {
-    const data = await fetchPois({ bbox: lastBbox.value, groups: on.join(',') });
-    mapStore.setPois(data);
-  } catch (e) {
-    console.error('[MAP-02] pois 조회 실패:', e.error, e.message);
-    mapStore.setPois([]);
   }
 }
 
@@ -92,8 +71,6 @@ function onViewport({ bbox, level }) {
   loadMarkers();
 }
 
-// 필터 변경 → 현재 뷰포트로 재조회(§8.1.1). 필터는 DETAIL 에서만 서버가 적용.
+// 필터 변경 → 현재 뷰포트로 재조회. DETAIL=마커 필터, SUMMARY=지역별 매물 갯수도 필터 반영(기능5).
 watch(() => mapStore.filter, loadMarkers, { deep: true });
-// 인프라 토글 변경 → POI 오버레이만 재조회(MAP-02). 마커 재조회는 불필요.
-watch(() => mapStore.infraLayers, loadPois, { deep: true });
 </script>

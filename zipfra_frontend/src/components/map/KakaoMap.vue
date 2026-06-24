@@ -6,8 +6,8 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { useMapStore } from '@/stores/map';
 import { kakaoBoundsToBbox } from '@/utils/bbox';
-import { totalScore, scoreColor, GROUPS } from '@/utils/score';
-import { markerPriceLabel } from '@/utils/price';
+import { totalScore, scoreColor } from '@/utils/score';
+import { clusterPriceLabel } from '@/utils/price';
 
 // 초기 중심/줌(기본: 강남 삼성동 — 실거래 데이터 밀집 지역). 마커 데이터(MAP-01)는 `markers`로 주입.
 const props = defineProps({
@@ -16,7 +16,7 @@ const props = defineProps({
   markers: { type: Array, default: () => [] }, // [{ id, lat, lng }]
 });
 
-// §7.4: 지도는 상세 로직 없이 이벤트만 발신한다.
+// §7.4: 지도는 상세 로직 없이 이벤트만 발신한다. marker-click 은 클러스터 매물 배열(MarkerDTO[]).
 const emit = defineEmits(['marker-click', 'viewport-change', 'map-click']);
 
 const mapContainer = ref(null);
@@ -44,33 +44,10 @@ function render() {
     renderRegions();
   } else {
     renderDetailMarkers();
-    renderPois(); // MAP-02 인프라 오버레이(켜진 그룹 POI)
   }
 }
 
-// MAP-02: 켜진 인프라 그룹의 POI 를 그룹색 작은 점으로(매물 핀과 구분). 클릭 비활성.
-function renderPois() {
-  const { kakao } = window;
-  mapStore.pois.forEach((p) => {
-    const grp = GROUPS.find((x) => x.key === p.group);
-    const color = grp ? grp.color : '#888';
-    const dot = document.createElement('div');
-    dot.title = p.name || '';
-    dot.style.cssText =
-      `width:10px;height:10px;border-radius:50%;background:${color};`
-      + 'border:1.5px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4);';
-    const overlay = new kakao.maps.CustomOverlay({
-      position: new kakao.maps.LatLng(p.lat, p.lng),
-      content: dot,
-      yAnchor: 0.5,
-      clickable: false,
-    });
-    overlay.setMap(map);
-    markerObjects.push(overlay);
-  });
-}
-
-// SUMMARY: 시·군·구 중심에 집계 풍선(지역명 + 거래건수). 클릭 시 그 지역으로 줌인.
+// SUMMARY: 시·군·구 중심에 집계 풍선(지역명 + 매물 갯수). 클릭 시 그 지역으로 줌인.
 function renderRegions() {
   const { kakao } = window;
   mapStore.regions.forEach((r) => {
@@ -82,7 +59,7 @@ function renderRegions() {
       + 'cursor:pointer;text-align:center;line-height:1.2;';
     bubble.innerHTML =
       `<span style="font-size:10px;opacity:.9;">${r.regionName ?? ''}</span>`
-      + `<span style="font-size:15px;font-weight:800;">${r.dealCount ?? 0}</span>`;
+      + `<span style="font-size:15px;font-weight:800;">${r.propertyCount ?? 0}</span>`;
     // §7.4: 풍선 클릭 → 해당 지역으로 줌인(DETAIL 전환). 지도 제어만, 상세 모달 X.
     bubble.addEventListener('click', () => {
       map.setCenter(new kakao.maps.LatLng(r.lat, r.lng));
@@ -99,17 +76,29 @@ function renderRegions() {
   });
 }
 
-// DETAIL: 개별 매물 점수 핀.
+// DETAIL: 동일좌표(=같은 단지, 층만 다른 매물) 묶어 핀 1개. 평균 점수·평균가 + N건 뱃지.
 function renderDetailMarkers() {
   const { kakao } = window;
+  // 좌표 5자리 키로 그룹핑. 단지당 지오코딩 1회라 같은 단지 매물은 좌표가 동일(설계 §4).
+  const groups = new Map();
   props.markers.forEach((item) => {
-    // §5.1: 매물 종합 점수(base×페르소나 가중치 정규화)를 핀 마커로 표시(#6 실시간 반영).
-    const score = totalScore(item, mapStore.persona);
+    const key = `${item.lat.toFixed(5)},${item.lng.toFixed(5)}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  });
+
+  groups.forEach((items) => {
+    const rep = items[0];
+    // §5.1: 그룹 평균 종합 점수(base×페르소나 가중치 정규화, #6 실시간). 동일좌표라 사실상 동일값.
+    const score = Math.round(
+      items.reduce((s, it) => s + totalScore(it, mapStore.persona), 0) / items.length,
+    );
     const color = scoreColor(score);
-    const price = markerPriceLabel(item); // 실거래가(만원 단위 포맷)
+    const price = clusterPriceLabel(items); // 단건=실거래가, 다건=평균 대표가(~)
+    const count = items.length;
     const pin = document.createElement('div');
     pin.style.cssText = 'position:relative;cursor:pointer;';
-    // 점수 배지 + 실거래가 알약(Glassmorphism §7.5). 배지 색은 점수 색.
+    // 점수 배지 + 가격 알약(Glassmorphism §7.5). 배지 색은 점수 색.
     const pill = document.createElement('div');
     pill.style.cssText =
       'display:flex;align-items:center;gap:5px;padding:3px 9px 3px 3px;border-radius:9999px;'
@@ -125,16 +114,25 @@ function renderDetailMarkers() {
     priceEl.style.cssText = 'font-size:12px;font-weight:700;color:#0f172a;';
     pill.appendChild(circle);
     pill.appendChild(priceEl);
+    // 동일좌표 매물 N건 뱃지(2건 이상일 때만).
+    if (count > 1) {
+      const badge = document.createElement('span');
+      badge.textContent = `${count}건`;
+      badge.style.cssText =
+        'font-size:11px;font-weight:700;color:#fff;background:#944a00;'
+        + 'border-radius:9999px;padding:1px 7px;flex:none;';
+      pill.appendChild(badge);
+    }
     const tail = document.createElement('div');
     tail.style.cssText =
       `position:absolute;left:50%;bottom:-6px;transform:translateX(-50%);width:0;height:0;`
       + `border-left:5px solid transparent;border-right:5px solid transparent;border-top:8px solid ${color};`;
     pin.appendChild(pill);
     pin.appendChild(tail);
-    // §7.4: 모달 등 상세 구현 금지 — propertyId만 발신.
-    pin.addEventListener('click', () => emit('marker-click', item.id));
+    // §7.4: 모달 등 상세 구현 금지 — 클러스터 매물 배열만 발신(상위가 우측 목록을 연다).
+    pin.addEventListener('click', () => emit('marker-click', items));
     const overlay = new kakao.maps.CustomOverlay({
-      position: new kakao.maps.LatLng(item.lat, item.lng),
+      position: new kakao.maps.LatLng(rep.lat, rep.lng),
       content: pin,
       yAnchor: 1.0, // 핀 꼬리 끝이 좌표에 닿도록
       clickable: true,
@@ -167,8 +165,6 @@ watch(() => props.markers, render, { deep: true });
 watch(() => mapStore.regions, render, { deep: true });
 // 전략(DETAIL↔SUMMARY) 전환 시 즉시 재렌더.
 watch(() => mapStore.strategy, render);
-// MAP-02 POI 오버레이 갱신.
-watch(() => mapStore.pois, render, { deep: true });
 // #6: 페르소나 가중치 변경 시 배지 점수·색상 실시간 갱신.
 watch(() => mapStore.persona, render, { deep: true });
 // #7: 검색·현위치 이동 명령 → 지도 중심/레벨 변경(이후 idle 이벤트가 markers 재조회).
