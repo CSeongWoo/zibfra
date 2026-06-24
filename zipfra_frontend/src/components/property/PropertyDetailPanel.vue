@@ -37,6 +37,8 @@
             <div><span class="k">면적</span><span class="v">{{ p.exclusiveArea ? p.exclusiveArea + '㎡' : '-' }}</span></div>
             <div><span class="k">층수</span><span class="v">{{ p.floorNo ? p.floorNo + '층' : '-' }}</span></div>
             <div><span class="k">유형</span><span class="v">{{ typeLabel(p.propertyType) }}</span></div>
+            <div><span class="k">평균 거래가</span><span class="v">{{ priceLabel(p) }}</span></div>
+            <div><span class="k">건축연도</span><span class="v">{{ p.buildYear ? p.buildYear + '년' : '-' }}</span></div>
           </div>
         </div>
 
@@ -129,7 +131,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useMapStore } from '@/stores/map';
 import { useAuthStore } from '@/stores/auth';
@@ -304,11 +306,21 @@ async function submitReview() {
   }
 }
 
-onMounted(() => {
+function reloadPropertyData() {
   const { kakao } = window;
-  if (kakao?.maps) kakao.maps.load(() => { loadDong(); initRoadview(); initMiniMap(); });
+  if (kakao?.maps) {
+    kakao.maps.load(() => { loadDong(); initRoadview(); initMiniMap(); });
+  }
   loadReviews();
   loadInfraCounts();
+}
+
+watch(() => props.property.id, () => {
+  reloadPropertyData();
+});
+
+onMounted(() => {
+  reloadPropertyData();
 });
 onUnmounted(() => {/* kakao 인스턴스는 컨테이너와 함께 GC */});
 </script>
@@ -346,16 +358,26 @@ onUnmounted(() => {/* kakao 인스턴스는 컨테이너와 함께 GC */});
 }
 
 .back {
-  background: transparent;
-  border: none;
-  color: #44474c;
+  background: #ffffff;
+  border: 1px solid #c4c6cd;
+  border-radius: 9999px;
+  color: #041627;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
-  padding: 6px 4px;
-  transition: color 0.15s ease;
+  padding: 10px 20px;
+  box-shadow: 0 2px 8px rgba(26,43,60,0.06);
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
-.back:hover { color: #041627; }
+.back:hover { 
+  background: #f8f9fa;
+  border-color: #944a00;
+  color: #944a00;
+  box-shadow: 0 4px 12px rgba(26,43,60,0.1);
+}
 
 /* 2컬럼 그리드 */
 .grid {
@@ -410,7 +432,7 @@ onUnmounted(() => {/* kakao 인스턴스는 컨테이너와 함께 GC */});
 }
 .price { font-size: 22px; font-weight: 800; color: #041627; }
 .info-grid {
-  display: grid; grid-template-columns: repeat(3, 1fr);
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px 0;
   border-top: 1px solid #e1e3e4; padding-top: 14px;
 }
 .info-grid > div { display: flex; flex-direction: column; align-items: center; gap: 4px; }
