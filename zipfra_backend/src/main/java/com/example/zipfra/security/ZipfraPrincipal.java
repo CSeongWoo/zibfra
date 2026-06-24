@@ -32,7 +32,7 @@ public class ZipfraPrincipal implements UserDetails {
         this(
                 Long.valueOf(claims.getSubject()),
                 claims.get("email", String.class),
-                Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER")));
+                Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + claims.get("role", String.class))));
     }
 
     @Override

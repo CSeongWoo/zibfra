@@ -15,4 +15,7 @@ public class User {
     private String email;
     private String password;  // BCrypt 해시
     private String nickname;
+    private String profileImageUrl;
+    private String role;
+    private Boolean isActive;
 }

@@ -12,6 +12,7 @@ CREATE TABLE `users` (
   `email` VARCHAR(255) NOT NULL,
   `password` VARCHAR(255) NOT NULL,
   `nickname` VARCHAR(100) DEFAULT NULL,
+  `profile_image_url` VARCHAR(255) DEFAULT NULL,
   `role` VARCHAR(50) DEFAULT 'USER',
   `is_active` TINYINT(1) DEFAULT 1,
   `created_at` DATETIME DEFAULT NULL,

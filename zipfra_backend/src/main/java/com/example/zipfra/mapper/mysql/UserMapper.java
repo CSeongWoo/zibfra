@@ -31,4 +31,24 @@ public interface UserMapper {
      * AUTH-01에 사용. 삽입된 PK는 user.id에 자동 주입(useGeneratedKeys).
      */
     void insertUser(User user);
+
+    /**
+     * 회원 정보 수정
+     */
+    void updateUser(User user);
+
+    /**
+     * 회원 계정 비활성화 (Soft delete)
+     */
+    void deactivateUser(@Param("id") Long id);
+
+    /**
+     * 비밀번호 찾기 시 이메일로 비밀번호 업데이트
+     */
+    void updatePasswordByEmail(@Param("email") String email, @Param("password") String password);
+
+    /**
+     * 닉네임으로 유저 검색 (Like 검색)
+     */
+    java.util.List<User> searchByNickname(@Param("nickname") String nickname);
 }

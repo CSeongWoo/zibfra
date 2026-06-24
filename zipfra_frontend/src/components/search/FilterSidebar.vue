@@ -12,22 +12,12 @@
 
     <div class="sidebar-inner" v-show="mapStore.sidebarOpen">
 
-      <!-- 로고 + 인증 헤더 -->
+      <!-- 로고 헤더 -->
       <div class="sidebar-header">
         <router-link to="/" class="logo-link">
           <span class="logo-icon">🏠</span>
-          <span class="logo-text">Zibfra</span>
+          <span class="logo-text">Zipfra</span>
         </router-link>
-
-        <div class="auth-area">
-          <template v-if="authStore.isAuthenticated">
-            <span class="greeting">{{ authStore.currentUser?.nickname }}님</span>
-            <button class="auth-btn secondary" @click="handleLogout" :disabled="authStore.loading">로그아웃</button>
-          </template>
-          <template v-else>
-            <button class="auth-btn primary" @click="goToLogin">로그인</button>
-          </template>
-        </div>
       </div>
 
       <div class="sidebar-body">
@@ -110,8 +100,20 @@
           </div>
         </div>
       </div>
+
+      <!-- 프로필 푸터 영역 -->
+      <div class="sidebar-footer">
+        <UserProfileFloating />
+      </div>
     </div>
   </aside>
+
+  <!-- 프로필 모달 (정보 수정 및 탈퇴) -->
+  <ProfileModal
+    v-if="isProfileModalOpen"
+    :is-open="isProfileModalOpen"
+    @close="isProfileModalOpen = false"
+  />
 </template>
 
 <script setup>
@@ -121,6 +123,8 @@ import { useMapStore } from '@/stores/map';
 import { useAuthStore } from '@/stores/auth';
 import { PERSONA_PRESETS, GROUPS } from '@/utils/score';
 import { PRICE_MAX_IDX, idxToPrice, priceToIdx, formatManwon, priceFilterLabel } from '@/utils/price';
+import ProfileModal from '@/components/auth/ProfileModal.vue';
+import UserProfileFloating from '@/components/auth/UserProfileFloating.vue';
 
 const mapStore = useMapStore();
 const authStore = useAuthStore();
@@ -128,17 +132,9 @@ const router = useRouter();
 const filter = computed(() => mapStore.filter);
 const persona = computed(() => mapStore.persona);
 
-function goToLogin() {
-  router.push('/login');
-}
+const isProfileModalOpen = ref(false);
 
-async function handleLogout() {
-  try {
-    await authStore.logout();
-  } catch (e) {
-    console.error('Logout failed:', e);
-  }
-}
+// Removed auth related methods from here as they moved to UserProfileFloating
 
 const DEAL_TYPES = [
   { label: '매매', value: 'SALE' },
@@ -219,7 +215,6 @@ function onPreset(p) {
   z-index: 8;
   width: 320px;
   background: #ffffff;
-  border-right: 1px solid #c4c6cd;
   box-shadow: 0px 4px 12px rgba(26, 43, 60, 0.05);
   display: flex;
   font-size: 13px;
@@ -228,7 +223,6 @@ function onPreset(p) {
 
 .sidebar.collapsed {
   width: 0;
-  border-right: none;
 }
 
 /* 내부 컨텐츠 (펼침 상태에서만) */
@@ -241,13 +235,13 @@ function onPreset(p) {
   height: 100%;
 }
 
-/* 로고 + 인증 헤더 */
+/* 로고 헤더 */
 .sidebar-header {
   flex: none;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 14px 16px 12px;
+  justify-content: center;
+  padding: 20px 16px 16px; /* 위쪽 패딩을 늘려 로고를 더 중앙에 위치시킴 */
   border-bottom: 1px solid #c4c6cd;
   background: #ffffff;
 }
@@ -255,15 +249,17 @@ function onPreset(p) {
 .logo-link {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 8px;
   text-decoration: none;
   cursor: pointer;
+  width: 100%;
 }
 
-.logo-icon { font-size: 18px; }
+.logo-icon { font-size: 24px; }
 
 .logo-text {
-  font-size: 17px;
+  font-size: 22px;
   font-weight: 800;
   color: #041627;
   letter-spacing: -0.5px;
@@ -307,6 +303,9 @@ function onPreset(p) {
 }
 
 .auth-btn.secondary {
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
   background: transparent;
   color: #44474c;
   border: 1px solid #c4c6cd;
@@ -369,6 +368,14 @@ function onPreset(p) {
 
 .sidebar-body::-webkit-scrollbar {
   display: none;
+}
+
+/* 프로필 푸터 */
+.sidebar-footer {
+  flex: none;
+  padding: 0;
+  border-top: 1px solid #c4c6cd;
+  background: #ffffff;
 }
 
 .sec-title {

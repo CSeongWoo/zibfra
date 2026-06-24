@@ -34,3 +34,17 @@ export function logout() {
 export function getProfile() {
   return http.get('/users/me');
 }
+
+/**
+ * AUTH-05-1 비밀번호 찾기 (인증번호 전송)
+ */
+export function sendAuthCode(emailData) {
+  return http.post('/auth/forgot-password/send-code', emailData);
+}
+
+/**
+ * AUTH-05-2 비밀번호 찾기 (인증번호 검증 및 임시 비밀번호 발급)
+ */
+export function forgotPassword(forgotData) {
+  return http.post('/auth/forgot-password', forgotData);
+}

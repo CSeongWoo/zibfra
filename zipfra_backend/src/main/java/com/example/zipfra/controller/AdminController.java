@@ -9,9 +9,12 @@ import com.example.zipfra.service.PoiIngestService;
 import com.example.zipfra.service.PropertyScoreBatch;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import com.example.zipfra.service.AdminService;
 
 /**
  * 적재 운영 트리거 (§9, Protected). 데모/초기 적재용 수동 엔드포인트.
@@ -24,13 +27,16 @@ public class AdminController {
     private final IngestionService ingestionService;
     private final PoiIngestService poiIngestService;
     private final PropertyScoreBatch propertyScoreBatch;
+    private final AdminService adminService;
 
     public AdminController(IngestionService ingestionService,
                           PoiIngestService poiIngestService,
-                          PropertyScoreBatch propertyScoreBatch) {
+                          PropertyScoreBatch propertyScoreBatch,
+                          AdminService adminService) {
         this.ingestionService = ingestionService;
         this.poiIngestService = poiIngestService;
         this.propertyScoreBatch = propertyScoreBatch;
+        this.adminService = adminService;
     }
 
     @PostMapping("/ingest/real-estate")
@@ -147,5 +153,14 @@ public class AdminController {
         return ResponseEntity.ok()
                 .header("X-Api-Version", "1")
                 .body(Map.of("dealYmd", dealYmd, "regions", regions));
+    }
+
+    /**
+     * ADMIN-01 회원 강제 삭제 (Soft delete)
+     */
+    @DeleteMapping("/users/{userId}")
+    public ResponseEntity<Void> deleteUser(@PathVariable("userId") Long userId) {
+        adminService.deleteUserForcefully(userId);
+        return ResponseEntity.noContent().build();
     }
 }

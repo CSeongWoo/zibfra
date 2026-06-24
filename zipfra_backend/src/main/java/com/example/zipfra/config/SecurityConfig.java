@@ -42,13 +42,17 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         // Public 인증 엔드포인트 및 지도 API
-                        .requestMatchers("/api/v1/auth/signup", "/api/v1/auth/login", "/api/v1/auth/refresh").permitAll()
+                        .requestMatchers("/api/v1/auth/signup", "/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/forgot-password", "/api/v1/auth/forgot-password/send-code").permitAll()
                         .requestMatchers("/api/v1/map/markers", "/api/v1/map/pois", "/api/v1/map/search").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/map/property/*/trend").permitAll()
                         // GET /api/v1/reviews 는 Public (선택 인증)
                         .requestMatchers(HttpMethod.GET, "/api/v1/reviews").permitAll()
+                        // Admin 보호 라우트
+                        .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         // Swagger UI 및 docs
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        // 정적 파일 리소스 접근 허용
+                        .requestMatchers("/uploads/profiles/**").permitAll()
                         // 그 외 Protected 자원 보호
                         .anyRequest().authenticated()
                 )

@@ -5,7 +5,13 @@ import {
   signup as apiSignup,
   logout as apiLogout,
   getProfile as apiGetProfile,
-} from '../api/auth';
+  sendAuthCode as apiSendAuthCode,
+  forgotPassword as apiForgotPassword,
+} from '@/api/auth';
+import {
+  updateMyInfo as apiUpdateMyInfo,
+  deactivateMe as apiDeactivateMe,
+} from '../api/user';
 
 /**
  * 인증 상태 스토어 (Phase 2 Dev B).
@@ -70,6 +76,45 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  async function updateProfile(formData) {
+    loading.value = true;
+    try {
+      await apiUpdateMyInfo(formData);
+      await fetchProfile(); // 프로필 정보 갱신
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function deactivateAccount() {
+    loading.value = true;
+    try {
+      await apiDeactivateMe();
+    } finally {
+      clearAllAuth();
+      loading.value = false;
+    }
+  }
+
+  async function sendAuthCode(email) {
+    loading.value = true;
+    try {
+      await apiSendAuthCode({ email });
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function forgotPassword(email, code) {
+    loading.value = true;
+    try {
+      const response = await apiForgotPassword({ email, code });
+      return response.data.tempPassword;
+    } finally {
+      loading.value = false;
+    }
+  }
+
   async function fetchProfile() {
     try {
       const response = await apiGetProfile();
@@ -105,5 +150,9 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     fetchProfile,
     checkAuth,
+    updateProfile,
+    deactivateAccount,
+    sendAuthCode,
+    forgotPassword,
   };
 });
