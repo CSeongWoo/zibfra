@@ -44,6 +44,7 @@ public class SecurityConfig {
                         // Public 인증 엔드포인트 및 지도 API
                         .requestMatchers("/api/v1/auth/signup", "/api/v1/auth/login", "/api/v1/auth/refresh").permitAll()
                         .requestMatchers("/api/v1/map/markers", "/api/v1/map/pois", "/api/v1/map/search").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/map/property/*/trend").permitAll()
                         // GET /api/v1/reviews 는 Public (선택 인증)
                         .requestMatchers(HttpMethod.GET, "/api/v1/reviews").permitAll()
                         // Swagger UI 및 docs

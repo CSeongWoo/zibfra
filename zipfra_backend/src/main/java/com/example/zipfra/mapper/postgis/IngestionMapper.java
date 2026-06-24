@@ -48,4 +48,15 @@ public interface IngestionMapper {
                             @Param("dealCount") int dealCount,
                             @Param("avgAmount") Long avgAmount,
                             @Param("maxAmount") Long maxAmount);
+
+    /** 추이: 동일 지역·월 적재분 삭제(재적재 멱등). */
+    int deletePriceHistory(@Param("lawdCd") String lawdCd, @Param("dealYm") String dealYm);
+
+    /** 추이: 단지·거래유형·월별 평균가 1행 upsert. */
+    int upsertPriceHistory(@Param("buildingName") String buildingName,
+                           @Param("lawdCd") String lawdCd,
+                           @Param("dealType") String dealType,
+                           @Param("dealYm") String dealYm,
+                           @Param("avgAmount") long avgAmount,
+                           @Param("dealCount") int dealCount);
 }

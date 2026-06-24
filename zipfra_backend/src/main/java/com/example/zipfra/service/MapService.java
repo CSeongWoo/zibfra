@@ -5,6 +5,7 @@ import java.util.List;
 import com.example.zipfra.dto.map.MarkerFilter;
 import com.example.zipfra.dto.map.MarkerResponse;
 import com.example.zipfra.dto.map.PoiMarkerDTO;
+import com.example.zipfra.dto.map.PriceTrendPoint;
 import com.example.zipfra.dto.map.PropertySearchDTO;
 
 /**
@@ -52,4 +53,7 @@ public interface MapService {
      * @return 단지 목록(dealCount 내림차순), 없으면 빈 목록
      */
     List<PropertySearchDTO> searchProperties(String q, Integer limit);
+
+    /** 실거래가 추이: 매물 id 의 단지·거래유형 월별 평균가 시계열(없으면 빈 목록). */
+    List<PriceTrendPoint> getPriceTrend(long propertyId);
 }
