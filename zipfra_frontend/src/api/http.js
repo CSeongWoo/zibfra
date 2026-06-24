@@ -30,6 +30,10 @@ http.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  // FormData 전송 시, 기본 JSON Content-Type 제거 (브라우저가 multipart/form-data 및 boundary 자동 설정)
+  if (config.data instanceof FormData) {
+    delete config.headers['Content-Type'];
+  }
   return config;
 });
 

@@ -50,6 +50,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         // Swagger UI 및 docs
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        // 정적 파일 리소스 접근 허용
+                        .requestMatchers("/uploads/profiles/**").permitAll()
                         // 그 외 Protected 자원 보호
                         .anyRequest().authenticated()
                 )

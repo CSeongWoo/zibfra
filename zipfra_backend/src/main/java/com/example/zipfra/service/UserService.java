@@ -21,6 +21,7 @@ public class UserService {
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
     private final AuthService authService;
+    private final FileService fileService;
 
     /**
      * USER-02 본인 정보(닉네임, 비밀번호) 수정
@@ -40,10 +41,18 @@ public class UserService {
             nickname = request.getNickname();
         }
 
+        String profileImageUrl = user.getProfileImageUrl();
+        if (Boolean.TRUE.equals(request.getDeleteProfileImage())) {
+            profileImageUrl = null;
+        } else if (request.getProfileImage() != null && !request.getProfileImage().isEmpty()) {
+            profileImageUrl = fileService.storeProfileImage(request.getProfileImage());
+        }
+
         User updatedUser = User.builder()
                 .id(user.getId())
                 .nickname(nickname)
                 .password(encodedPassword)
+                .profileImageUrl(profileImageUrl)
                 .build();
 
         userMapper.updateUser(updatedUser);

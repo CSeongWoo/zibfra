@@ -29,6 +29,7 @@ erDiagram
         varchar     email UK "NOT NULL"
         varchar     password_hash "NOT NULL"
         varchar     nickname
+        varchar     profile_image_url "DEFAULT NULL"
         varchar     role "DEFAULT 'USER'"
         boolean     is_active "DEFAULT true"
         datetime    created_at
@@ -154,6 +155,7 @@ erDiagram
 | `email` | VARCHAR(255) | UNIQUE, NOT NULL | 로그인 ID, JWT subject |
 | `password_hash` | VARCHAR(255) | NOT NULL | BCrypt 해시(평문 금지) |
 | `nickname` | VARCHAR(50) | NULL | 표시명 |
+| `profile_image_url` | VARCHAR(255) | NULL | 프로필 사진 이미지 URL |
 | `role` | VARCHAR(20) | NOT NULL, DEFAULT 'USER' | 권한(USER/ADMIN) |
 | `is_active` | BOOLEAN | NOT NULL, DEFAULT true | 탈퇴/정지 soft 처리 |
 | `created_at` | DATETIME | NOT NULL, DEFAULT CURRENT_TIMESTAMP | 생성 시각 |

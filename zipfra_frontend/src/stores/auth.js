@@ -76,10 +76,10 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function updateProfile(nickname, password) {
+  async function updateProfile(formData) {
     loading.value = true;
     try {
-      await apiUpdateMyInfo({ nickname, password });
+      await apiUpdateMyInfo(formData);
       await fetchProfile(); // 프로필 정보 갱신
     } finally {
       loading.value = false;

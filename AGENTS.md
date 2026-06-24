@@ -607,8 +607,8 @@ function upsertCache(summaryType, targetId, targetType, payload):
 | AUTH-03 | `POST` | `/api/v1/auth/refresh` | Public(RT 검증) | Redis / 없음 | RTR(§10.2): 구 RT 삭제+신규 AT/RT 발급; 불일치=탈취의심 즉시 삭제 |
 | AUTH-04 | `POST` | `/api/v1/auth/logout` | Protected | Redis / 없음 | `rt:{userId}` DEL + `bl:{accessToken}` SET(TTL=AT 잔여); `204` |
 | AUTH-05 | `POST` | `/api/v1/auth/forgot-password` | Public | MySQL(쓰기) / 없음 | 이메일 확인 후 임시 비밀번호 발급 또는 재설정 토큰 응답 로직 |
-| USER-01 | `GET` | `/api/v1/users/me` | Protected | MySQL / 없음 | 프로필 조회 |
-| USER-02 | `PATCH` | `/api/v1/users/me` | Protected | MySQL(쓰기) / 없음 | 본인의 닉네임 및 비밀번호 변경 로직; email 변경 불가 |
+| USER-01 | `GET` | `/api/v1/users/me` | Protected | MySQL / 없음 | 프로필 조회 (`profileImageUrl` 포함) |
+| USER-02 | `PATCH` | `/api/v1/users/me` | Protected | MySQL(쓰기) / 없음 | 본인의 닉네임, 비밀번호, 프로필 사진(`profileImageUrl`) 변경 로직; email 변경 불가 |
 | USER-03 | `DELETE` | `/api/v1/users/me` | Protected | MySQL(쓰기)+Redis / 없음 | 로그인한 사용자 본인의 계정 탈퇴 처리; DELETE 쿼리 수행 금지, 반드시 `is_active = false`로 업데이트 (Soft Delete); `204` |
 | USER-04 | `GET` | `/api/v1/users/search` | Protected | MySQL / 없음 | 특정 닉네임으로 유저 검색 (Like 검색 등) |
 | ADMIN-01 | `DELETE` | `/api/v1/admin/users/{userId}` | Admin | MySQL(쓰기)+Redis / 없음 | 관리자 권한으로 특정 악성 유저 강제 삭제 처리; DELETE 쿼리 수행 금지, 반드시 `is_active = false`로 업데이트 (Soft Delete); `204` |

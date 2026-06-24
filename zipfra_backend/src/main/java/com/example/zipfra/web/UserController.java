@@ -44,7 +44,7 @@ public class UserController {
      * USER-02 회원 정보(닉네임, 비밀번호) 수정
      */
     @PatchMapping("/me")
-    public ResponseEntity<Void> updateMyInfo(@RequestBody UpdateUserRequest request,
+    public ResponseEntity<Void> updateMyInfo(@ModelAttribute UpdateUserRequest request,
                                              @AuthenticationPrincipal ZipfraPrincipal principal) {
         if (principal == null) throw new ApiException(ErrorCode.TOKEN_MISSING);
         userService.updateMyInfo(principal.getId(), request);

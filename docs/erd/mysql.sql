@@ -9,6 +9,7 @@ CREATE TABLE users (
     email VARCHAR(255) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL,
     nickname VARCHAR(50),
+    profile_image_url VARCHAR(255) DEFAULT NULL,
     role VARCHAR(20) NOT NULL DEFAULT 'USER',
     is_active BOOLEAN NOT NULL DEFAULT true,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
