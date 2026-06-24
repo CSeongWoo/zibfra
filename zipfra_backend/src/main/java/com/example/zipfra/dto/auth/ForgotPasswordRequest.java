@@ -9,4 +9,5 @@ import lombok.Setter;
 @NoArgsConstructor
 public class ForgotPasswordRequest {
     private String email;
+    private String code;
 }

@@ -5,8 +5,9 @@ import {
   signup as apiSignup,
   logout as apiLogout,
   getProfile as apiGetProfile,
+  sendAuthCode as apiSendAuthCode,
   forgotPassword as apiForgotPassword,
-} from '../api/auth';
+} from '@/api/auth';
 import {
   updateMyInfo as apiUpdateMyInfo,
   deactivateMe as apiDeactivateMe,
@@ -95,10 +96,19 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function forgotPassword(email) {
+  async function sendAuthCode(email) {
     loading.value = true;
     try {
-      const response = await apiForgotPassword({ email });
+      await apiSendAuthCode({ email });
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function forgotPassword(email, code) {
+    loading.value = true;
+    try {
+      const response = await apiForgotPassword({ email, code });
       return response.data.tempPassword;
     } finally {
       loading.value = false;
@@ -142,6 +152,7 @@ export const useAuthStore = defineStore('auth', () => {
     checkAuth,
     updateProfile,
     deactivateAccount,
+    sendAuthCode,
     forgotPassword,
   };
 });

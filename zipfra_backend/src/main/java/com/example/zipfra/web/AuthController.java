@@ -3,6 +3,7 @@ package com.example.zipfra.web;
 import com.example.zipfra.dto.auth.ForgotPasswordRequest;
 import com.example.zipfra.dto.auth.ForgotPasswordResponse;
 import com.example.zipfra.dto.auth.LoginRequest;
+import com.example.zipfra.dto.auth.SendAuthCodeRequest;
 import com.example.zipfra.dto.auth.SignupRequest;
 import com.example.zipfra.dto.auth.TokenDto;
 import com.example.zipfra.dto.auth.TokenResponse;
@@ -102,11 +103,20 @@ public class AuthController {
     }
 
     /**
-     * AUTH-05 비밀번호 찾기 (임시 비밀번호 발급)
+     * AUTH-05-1 비밀번호 찾기 (인증번호 전송)
+     */
+    @PostMapping("/forgot-password/send-code")
+    public ResponseEntity<Void> sendAuthCode(@Valid @RequestBody SendAuthCodeRequest request) {
+        authService.sendAuthCode(request.getEmail());
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * AUTH-05-2 비밀번호 찾기 (인증번호 검증 및 임시 비밀번호 발급)
      */
     @PostMapping("/forgot-password")
     public ResponseEntity<ForgotPasswordResponse> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
-        String tempPassword = authService.forgotPassword(request.getEmail());
+        String tempPassword = authService.forgotPassword(request.getEmail(), request.getCode());
         return ResponseEntity.ok(new ForgotPasswordResponse(tempPassword));
     }
 

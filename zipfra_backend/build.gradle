@@ -29,6 +29,7 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-web'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-aspectj'
+	implementation 'org.springframework.boot:spring-boot-starter-mail'
 
 	// 2. 데이터베이스 & MyBatis (JPA, QueryDSL 완전 제거)
 	implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:3.0.3'

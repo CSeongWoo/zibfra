@@ -56,7 +56,32 @@
           type="email"
           placeholder="example@email.com"
           required
+          :disabled="isForgotPassword && isCodeSent"
         />
+
+        <!-- Code Field (Forgot Password Only) -->
+        <Transition name="fade">
+          <div v-if="isForgotPassword && isCodeSent" class="flex flex-col gap-1 w-full">
+            <div class="flex items-center gap-2">
+              <Input 
+                label="인증번호"
+                id="login-authCode"
+                v-model="form.authCode"
+                type="text"
+                placeholder="6자리 숫자"
+                required
+                class="flex-1"
+                maxlength="6"
+              />
+            </div>
+            <div class="text-[12px] text-primary/60 mt-1 flex justify-between">
+              <span>남은 시간: <span class="text-rose-500 font-semibold">{{ formatTime(timeLeft) }}</span></span>
+              <button type="button" @click="handleSendCode" class="text-info hover:underline bg-transparent border-none cursor-pointer p-0" :disabled="authStore.loading">
+                재전송
+              </button>
+            </div>
+          </div>
+        </Transition>
 
         <Transition name="fade">
           <Input
@@ -90,13 +115,18 @@
           </div>
         </Transition>
 
-        <Button variant="primary" type="submit" class="w-full mt-2 py-3 flex justify-center items-center" :disabled="authStore.loading">
+        <Button v-if="!(isForgotPassword && !isCodeSent)" variant="primary" type="submit" class="w-full mt-2 py-3 flex justify-center items-center" :disabled="authStore.loading">
           <span v-if="authStore.loading" class="w-5 h-5 border-2 border-white/30 rounded-full border-t-white animate-spin"></span>
           <span v-else>{{ isForgotPassword ? '임시 비밀번호 발급' : isLogin ? '로그인' : '회원가입 완료' }}</span>
         </Button>
         
+        <Button v-if="isForgotPassword && !isCodeSent" variant="primary" type="button" @click="handleSendCode" class="w-full mt-2 py-3 flex justify-center items-center" :disabled="authStore.loading">
+          <span v-if="authStore.loading" class="w-5 h-5 border-2 border-white/30 rounded-full border-t-white animate-spin"></span>
+          <span v-else>인증번호 전송</span>
+        </Button>
+        
         <div v-if="isForgotPassword" class="text-center mt-2">
-          <button type="button" class="text-[13px] text-primary/60 hover:text-primary bg-transparent border-none cursor-pointer underline" @click="isForgotPassword = false; errorMessage = ''; successMessage = ''">
+          <button type="button" class="text-[13px] text-primary/60 hover:text-primary bg-transparent border-none cursor-pointer underline" @click="resetForgotPassword">
             로그인으로 돌아가기
           </button>
         </div>
@@ -106,7 +136,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch } from 'vue';
+import { ref, reactive, watch, onUnmounted } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { useRouter } from 'vue-router';
 import Button from '@/components/common/Button.vue';
@@ -125,27 +155,90 @@ const form = reactive({
   email: '',
   password: '',
   nickname: '',
+  authCode: '',
+});
+
+const isCodeSent = ref(false);
+const timeLeft = ref(300); // 5분
+let timerInterval = null;
+
+function startTimer() {
+  stopTimer();
+  timeLeft.value = 300;
+  timerInterval = setInterval(() => {
+    if (timeLeft.value > 0) {
+      timeLeft.value--;
+    } else {
+      stopTimer();
+    }
+  }, 1000);
+}
+
+function stopTimer() {
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+}
+
+function formatTime(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function resetForgotPassword() {
+  isForgotPassword.value = false;
+  isCodeSent.value = false;
+  form.authCode = '';
+  stopTimer();
+  errorMessage.value = '';
+  successMessage.value = '';
+}
+
+onUnmounted(() => {
+  stopTimer();
 });
 
 // Removed watcher to prevent clearing messages when switching state programmatically.
+
+async function handleSendCode() {
+  errorMessage.value = '';
+  successMessage.value = '';
+  if (!form.email) {
+    errorMessage.value = '이메일을 입력해주세요.';
+    return;
+  }
+  try {
+    await authStore.sendAuthCode(form.email);
+    successMessage.value = '인증번호가 이메일로 전송되었습니다. 5분 안에 입력해주세요.';
+    isCodeSent.value = true;
+    startTimer();
+  } catch (err) {
+    errorMessage.value = err.response?.data?.message || err.message || '인증번호 전송에 실패했습니다.';
+  }
+}
 
 async function handleSubmit() {
   errorMessage.value = '';
   successMessage.value = '';
 
   if (isForgotPassword.value) {
-    if (!form.email) {
-      errorMessage.value = '이메일을 입력해주세요.';
+    if (!form.email || !form.authCode) {
+      errorMessage.value = '이메일과 인증번호를 모두 입력해주세요.';
+      return;
+    }
+    if (timeLeft.value === 0) {
+      errorMessage.value = '인증번호 입력 시간이 초과되었습니다. 재전송해주세요.';
       return;
     }
     try {
-      const tempPw = await authStore.forgotPassword(form.email);
-      successMessage.value = `임시 비밀번호가 발급되었습니다: ${tempPw}`;
-      form.password = '';
-      isForgotPassword.value = false;
+      const tempPw = await authStore.forgotPassword(form.email, form.authCode);
+      resetForgotPassword();
       isLogin.value = true;
+      successMessage.value = `임시 비밀번호가 발급되었습니다: ${tempPw}`;
     } catch (err) {
-      errorMessage.value = err.response?.data?.message || err.message || '임시 비밀번호 발급에 실패했습니다.';
+      errorMessage.value = err.response?.data?.message || err.message || '인증 및 임시 비밀번호 발급에 실패했습니다.';
     }
     return;
   }
