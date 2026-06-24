@@ -26,6 +26,17 @@ export function priceLabel(m) {
   return formatManwon(m.dealAmount ?? m.deposit);
 }
 
+// 선택한 거래유형에 따른 가격 필터 기준 라벨. 매매=매매가, 전세=보증금, 월세=월세(보증금 아님).
+// 빈/혼합 선택 시 해당하는 기준을 모두 표기. (매매엔 보증금 개념 없음)
+export function priceFilterLabel(dealTypes) {
+  const set = new Set(dealTypes || []);
+  const parts = [];
+  if (set.size === 0 || set.has('SALE')) parts.push('매매가');
+  if (set.size === 0 || set.has('JEONSE')) parts.push('보증금');
+  if (set.size === 0 || set.has('WOLSE')) parts.push('월세');
+  return parts.join('/');
+}
+
 // 마커용 짧은 가격: 매매는 가격만, 그 외는 유형 접두(전세 5억) — 동일 숫자라도 거래유형을 구분.
 export function markerPriceLabel(m) {
   if (m.dealType === 'SALE' || m.dealType == null) return priceLabel(m);
@@ -46,9 +57,12 @@ export function clusterPriceLabel(items) {
 // ── 가격 필터 비균등 슬라이더(기능2) ──────────────────────────
 // 만원 단위. 오른쪽으로 갈수록 점프가 커지는 스텝 배열. 슬라이더는 '인덱스'를 다룬다(눈금 균등, 값 점프).
 // 전부 천만원의 배수라 라벨에 0.5억 같은 소수 억이 안 나온다.
+// 단일 눈금: 저가 구간(월세 10~500만)은 10~50 단위로 촘촘, 고가 구간(매매/전세 1천만~100억)은 점프 크게.
+// 한 슬라이더로 월세·전세·매매 모두 커버(거래유형 전환 없이). 눈금 균등·값 점프(인덱스 기반).
 export const PRICE_STOPS = [
-  0, 1000, 2000, 3000, 5000, 7000, 10000, 15000, 20000, 30000,
-  50000, 70000, 100000, 200000, 300000, 500000, 1000000,
+  0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 150, 200, 300, 500,
+  1000, 2000, 3000, 5000, 7000, 10000, 15000, 20000, 30000, 50000,
+  70000, 100000, 200000, 300000, 500000, 1000000,
 ];
 export const PRICE_MAX_IDX = PRICE_STOPS.length - 1;
 
