@@ -89,6 +89,16 @@
         LIMIT #{limit}
     </select>
 
+    <!-- 실거래가 추이: 매물 id → 그 단지·거래유형의 월별 평균가 시계열(좌표 무관). -->
+    <select id="findPriceTrend" resultType="com.example.zipfra.dto.map.PriceTrendPoint">
+        SELECT h.deal_ym, h.avg_amount, h.deal_count
+        FROM building_price_history h
+        JOIN real_estate_sales r
+          ON r.building_name = h.building_name AND r.lawd_cd = h.lawd_cd AND r.deal_type = h.deal_type
+        WHERE r.id = #{propertyId}
+        ORDER BY h.deal_ym
+    </select>
+
     <!--
       SUMMARY: bbox 내 시·군·구별 매물 갯수(실시간 COUNT) + 검색 필터 반영(기능5, §8.1.1).
       이름·중심좌표·평균/최고가는 region_summary(rs)에서, 갯수는 real_estate_sales(res)를 GiST bbox 필터 후

@@ -83,3 +83,18 @@ CREATE TABLE property_score (
     convenience_base DOUBLE PRECISION NOT NULL DEFAULT 0,
     computed_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ==========================================
+-- 6. building_price_history (실거래가 추이 차트용, 좌표·지오코딩 없음)
+--    국토부 월별 실거래가를 단지(building_name+lawd_cd)·거래유형·월 단위로 평균 집계.
+--    대표가(avg_amount) = SALE:매매가 / JEONSE:보증금 / WOLSE:월세 평균. 마커·SUMMARY 영향 0.
+-- ==========================================
+CREATE TABLE building_price_history (
+    building_name VARCHAR(200) NOT NULL,
+    lawd_cd       VARCHAR(10)  NOT NULL,
+    deal_type     VARCHAR(10)  NOT NULL,   -- SALE | JEONSE | WOLSE
+    deal_ym       CHAR(6)      NOT NULL,
+    avg_amount    BIGINT       NOT NULL,   -- 그 달 대표가 평균(만원)
+    deal_count    INTEGER      NOT NULL,
+    PRIMARY KEY (building_name, lawd_cd, deal_type, deal_ym)
+);

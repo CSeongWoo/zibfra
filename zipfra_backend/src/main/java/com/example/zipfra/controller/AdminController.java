@@ -57,6 +57,42 @@ public class AdminController {
                 .body(Map.of("source", source, "lawdCd", lawdCd, "dealYmd", dealYmd, "ingested", ingested));
     }
 
+    /** 실거래가 추이 적재(좌표·지오코딩 없음). 한 시군구의 fromYmd~toYmd 월 순회 × 소스 → building_price_history. */
+    @PostMapping("/ingest/price-history")
+    public ResponseEntity<Map<String, Object>> ingestPriceHistory(
+            @RequestParam String lawdCd,
+            @RequestParam String fromYmd,
+            @RequestParam String toYmd,
+            @RequestParam(required = false) String sources) {
+
+        if (!lawdCd.matches("\\d{5}")) {
+            throw new ApiException(ErrorCode.INVALID_PARAM, "lawdCd 는 숫자 5자리여야 합니다: " + lawdCd);
+        }
+        if (!fromYmd.matches("\\d{6}") || !toYmd.matches("\\d{6}")) {
+            throw new ApiException(ErrorCode.INVALID_PARAM, "fromYmd/toYmd 는 YYYYMM 6자리여야 합니다");
+        }
+        int rows = ingestionService.ingestPriceHistoryRange(lawdCd, fromYmd, toYmd, sources);
+        return ResponseEntity.ok()
+                .header("X-Api-Version", "1")
+                .body(Map.of("lawdCd", lawdCd, "fromYmd", fromYmd, "toYmd", toYmd, "rows", rows));
+    }
+
+    /** 전국 추이 적재(250 시군구 × fromYmd~toYmd × 소스). 지오코딩 없음. 수십 분~시간·MOLIT 쿼터 주의. 멱등(재실행 이어서). */
+    @PostMapping("/ingest/price-history/nationwide")
+    public ResponseEntity<Map<String, Object>> ingestPriceHistoryNationwide(
+            @RequestParam String fromYmd,
+            @RequestParam String toYmd,
+            @RequestParam(required = false) String sources) {
+
+        if (!fromYmd.matches("\\d{6}") || !toYmd.matches("\\d{6}")) {
+            throw new ApiException(ErrorCode.INVALID_PARAM, "fromYmd/toYmd 는 YYYYMM 6자리여야 합니다");
+        }
+        int rows = ingestionService.ingestPriceHistoryNationwide(fromYmd, toYmd, sources);
+        return ResponseEntity.ok()
+                .header("X-Api-Version", "1")
+                .body(Map.of("fromYmd", fromYmd, "toYmd", toYmd, "sources", sources != null ? sources : "ALL", "rows", rows));
+    }
+
     /** 전국 244개 시군구 실거래가 DETAIL 일괄 적재(§9). sources 비면 6종 전부, 지정 시 해당 소스만. 수 분~수십 분 소요. */
     @PostMapping("/ingest/real-estate/nationwide")
     public ResponseEntity<Map<String, Object>> ingestRealEstateNationwide(

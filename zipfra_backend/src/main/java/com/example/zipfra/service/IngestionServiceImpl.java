@@ -257,6 +257,106 @@ public class IngestionServiceImpl implements IngestionService {
         return total;
     }
 
+    // ── 실거래가 추이 적재(좌표·지오코딩 없음) ──────────────────────────
+    private static final java.time.format.DateTimeFormatter YM = java.time.format.DateTimeFormatter.ofPattern("yyyyMM");
+
+    @Override
+    @Transactional(transactionManager = "spatialTransactionManager")
+    public int ingestPriceHistory(String source, String lawdCd, String dealYmd) {
+        Source s = Source.of(source);
+        JsonNode resp = fetch(s.pathKey, lawdCd, dealYmd);
+        JsonNode items = resp.path("response").path("body").path("items").path("item");
+        Map<String, long[]> agg = new HashMap<>();   // key = name0001dealType → [합, 건수]
+        if (items != null && items.isArray()) {
+            for (JsonNode it : items) aggregateTrend(it, s, agg);
+        } else if (items != null && items.isObject()) {
+            aggregateTrend(items, s, agg);
+        }
+        int rows = 0;
+        for (Map.Entry<String, long[]> e : agg.entrySet()) {
+            int sep = e.getKey().indexOf("~#~");
+            String name = e.getKey().substring(0, sep);
+            String dealType = e.getKey().substring(sep + 3);
+            long[] sc = e.getValue();
+            long avg = Math.round((double) sc[0] / sc[1]);
+            ingestionMapper.upsertPriceHistory(name, lawdCd, dealType, dealYmd, avg, (int) sc[1]);
+            rows++;
+        }
+        log.info("[trend] src={} lawd={} ym={} 단지×유형={}", source, lawdCd, dealYmd, rows);
+        return rows;
+    }
+
+    /** 한 거래 행 → (단지명, 거래유형) 키로 대표가 합·건수 누적. 대표가 = 매매가/보증금/월세. */
+    private void aggregateTrend(JsonNode it, Source s, Map<String, long[]> agg) {
+        String name = firstNonBlank(text(it, "aptNm"), text(it, "offiNm"), text(it, "mhouseNm"));
+        if (name == null || name.isBlank()) return;
+        String dealType;
+        Long price;
+        if (s.rent) {
+            Long m = parseAmount(text(it, "monthlyRent"));
+            int monthly = (m != null) ? m.intValue() : 0;
+            if (monthly > 0) { dealType = "WOLSE"; price = (long) monthly; }
+            else { dealType = "JEONSE"; price = parseAmount(text(it, "deposit")); }
+        } else {
+            dealType = "SALE";
+            price = parseAmount(text(it, "dealAmount"));
+        }
+        if (price == null) return;
+        long[] sc = agg.computeIfAbsent(name + "~#~" + dealType, k -> new long[2]);
+        sc[0] += price;
+        sc[1] += 1;
+    }
+
+    @Override
+    public int ingestPriceHistoryRange(String lawdCd, String fromYmd, String toYmd, String sourcesCsv) {
+        IngestionService self = selfProvider.getObject();   // (월,소스)별 @Transactional 적용
+        List<Source> sources = parseSources(sourcesCsv);
+        java.time.YearMonth from = java.time.YearMonth.parse(fromYmd, YM);
+        java.time.YearMonth to = java.time.YearMonth.parse(toYmd, YM);
+        int total = 0;
+        for (java.time.YearMonth ym = from; !ym.isAfter(to); ym = ym.plusMonths(1)) {
+            String ymd = ym.format(YM);
+            for (Source s : sources) {
+                try {
+                    total += self.ingestPriceHistory(s.name(), lawdCd, ymd);
+                } catch (Exception ex) {
+                    log.warn("[trend-range] {} {} {} 실패: {}", lawdCd, ymd, s, ex.getMessage());
+                }
+            }
+        }
+        log.info("[trend-range] lawd={} {}~{} 완료: {}행", lawdCd, fromYmd, toYmd, total);
+        return total;
+    }
+
+    @Override
+    public int ingestPriceHistoryNationwide(String fromYmd, String toYmd, String sourcesCsv) {
+        IngestionService self = selfProvider.getObject();
+        List<Source> sources = parseSources(sourcesCsv);
+        java.time.YearMonth from = java.time.YearMonth.parse(fromYmd, YM);
+        java.time.YearMonth to = java.time.YearMonth.parse(toYmd, YM);
+        int total = 0;
+        int regions = REGIONS.size();
+        for (java.time.YearMonth ym = from; !ym.isAfter(to); ym = ym.plusMonths(1)) {
+            String ymd = ym.format(YM);
+            int i = 0;
+            for (String code : REGIONS.keySet()) {
+                i++;
+                for (Source s : sources) {
+                    try {
+                        total += self.ingestPriceHistory(s.name(), code, ymd);
+                    } catch (Exception ex) {
+                        log.warn("[trend-nation] {} {} {} 실패: {}", ymd, code, s, ex.getMessage());
+                    }
+                }
+                if (i % 50 == 0 || i == regions) {
+                    log.info("[trend-nation] ym={} ({}/{}) 누적={}행", ymd, i, regions, total);
+                }
+            }
+        }
+        log.info("[trend-nation] 전국 추이 적재 완료 {}~{}: {}행 (sources={})", fromYmd, toYmd, total, sources);
+        return total;
+    }
+
     /** sourcesCsv 가 비면 6종 전부, 아니면 지정 소스만. */
     private static List<Source> parseSources(String sourcesCsv) {
         if (sourcesCsv == null || sourcesCsv.isBlank()) {
