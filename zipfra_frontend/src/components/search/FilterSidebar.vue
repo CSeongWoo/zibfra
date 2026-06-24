@@ -56,17 +56,15 @@
 
         <div class="group">
           <span class="label">
-            가격 범위
-            <em v-if="depositOnly">· 보증금</em>
-            <em v-else>· 매매가/보증금</em>
+            가격 범위 <em>· {{ priceFilterLabel(filter.dealTypes) }} 기준</em>
           </span>
           <!-- 직접 입력(천만 단위): 정밀 지정 -->
           <div class="price-inputs">
             <input type="number" min="0" inputmode="numeric" :value="minInput" @input="onMinInput" placeholder="최소" />
-            <span class="unit">천만</span>
+            <span class="unit">만</span>
             <span class="sep">~</span>
             <input type="number" min="0" inputmode="numeric" :value="maxInput" @input="onMaxInput" placeholder="최대" />
-            <span class="unit">천만</span>
+            <span class="unit">만</span>
           </div>
           <!-- 비균등 슬라이더(눈금 균등, 값은 오른쪽으로 갈수록 점프): 빠른 지정 -->
           <div class="dual">
@@ -76,8 +74,8 @@
             <input type="range" :min="0" :max="MAX_IDX" :step="1" :value="maxIdx" @input="onMaxSlider" />
           </div>
           <div class="dual-vals">
-            <span>{{ minIdx <= 0 ? '0' : formatPriceStop(idxToPrice(minIdx)) }}</span>
-            <span>{{ maxIdx >= MAX_IDX ? formatPriceStop(idxToPrice(MAX_IDX)) + '+' : formatPriceStop(idxToPrice(maxIdx)) }}</span>
+            <span>{{ minIdx <= 0 ? '0' : formatManwon(idxToPrice(minIdx)) }}</span>
+            <span>{{ maxIdx >= MAX_IDX ? formatManwon(idxToPrice(MAX_IDX)) + '+' : formatManwon(idxToPrice(maxIdx)) }}</span>
           </div>
         </div>
 
@@ -122,7 +120,7 @@ import { useRouter } from 'vue-router';
 import { useMapStore } from '@/stores/map';
 import { useAuthStore } from '@/stores/auth';
 import { PERSONA_PRESETS, GROUPS } from '@/utils/score';
-import { PRICE_MAX_IDX, idxToPrice, priceToIdx, formatPriceStop } from '@/utils/price';
+import { PRICE_MAX_IDX, idxToPrice, priceToIdx, formatManwon, priceFilterLabel } from '@/utils/price';
 
 const mapStore = useMapStore();
 const authStore = useAuthStore();
@@ -162,8 +160,8 @@ const depositOnly = computed(() => {
 const MAX_IDX = PRICE_MAX_IDX;
 const minIdx = computed(() => priceToIdx(filter.value.priceMin));
 const maxIdx = computed(() => (filter.value.priceMax == null ? MAX_IDX : priceToIdx(filter.value.priceMax)));
-const minInput = computed(() => (filter.value.priceMin == null ? '' : filter.value.priceMin / 1000));
-const maxInput = computed(() => (filter.value.priceMax == null ? '' : filter.value.priceMax / 1000));
+const minInput = computed(() => (filter.value.priceMin == null ? '' : filter.value.priceMin));
+const maxInput = computed(() => (filter.value.priceMax == null ? '' : filter.value.priceMax));
 const fillStyle = computed(() => ({
   left: `${(minIdx.value / MAX_IDX) * 100}%`,
   right: `${100 - (maxIdx.value / MAX_IDX) * 100}%`,
@@ -180,17 +178,17 @@ function onMaxSlider(e) {
   mapStore.setFilter({ priceMax: idx >= MAX_IDX ? null : idxToPrice(idx) });
 }
 
-// 입력칸(천만 단위): 빈 칸 = 무제한(null). 천만 → 만원 환산(×1000).
+// 입력칸(만원 단위 = 저장값 그대로): 빈 칸 = 무제한(null). 예 1억 = 10000만.
 function onMinInput(e) {
   const raw = e.target.value;
   if (raw === '' || raw == null) { mapStore.setFilter({ priceMin: null }); return; }
-  const v = Math.max(0, Number(raw)) * 1000;
+  const v = Math.max(0, Number(raw));
   mapStore.setFilter({ priceMin: v <= 0 ? null : v });
 }
 function onMaxInput(e) {
   const raw = e.target.value;
   if (raw === '' || raw == null) { mapStore.setFilter({ priceMax: null }); return; }
-  const v = Math.max(0, Number(raw)) * 1000;
+  const v = Math.max(0, Number(raw));
   mapStore.setFilter({ priceMax: v <= 0 ? null : v });
 }
 

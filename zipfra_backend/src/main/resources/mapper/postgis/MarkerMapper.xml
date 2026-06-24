@@ -13,8 +13,9 @@
     <!--
       bbox + 검색 필터(§8.1) 공통 WHERE 조각.
       거래/매물 유형은 다중선택 → deal_type / property_type IN (...). 빈 리스트면 조건 생략(전체).
-      가격 필터 대상 컬럼은 행별 분기: COALESCE(deal_amount, deposit) — 매매행=deal_amount, 전월세행=deposit
-      (둘이 상호배타). 거래유형 혼합 선택 시에도 각 행이 자기 컬럼 기준으로 걸러진다.
+      가격 필터 대상 컬럼은 거래유형별 행 분기: 매매=deal_amount, 전세=deposit, **월세=monthly_rent**.
+      → CASE WHEN deal_type='WOLSE' THEN monthly_rent ELSE COALESCE(deal_amount, deposit) END.
+      (매매엔 보증금 개념 없음. 월세는 보증금이 아니라 월세 기준.) 혼합 선택 시 각 행 자기 컬럼.
       filter 의 각 필드는 null/빈 이면 조건 생략(동적).
     -->
     <sql id="bboxAndFilter">
@@ -28,8 +29,8 @@
                 AND property_type IN
                 <foreach item="pt" collection="filter.propertyTypes" open="(" separator="," close=")">#{pt}</foreach>
             </if>
-            <if test="filter.priceMin != null">AND COALESCE(deal_amount, deposit) &gt;= #{filter.priceMin}</if>
-            <if test="filter.priceMax != null">AND COALESCE(deal_amount, deposit) &lt;= #{filter.priceMax}</if>
+            <if test="filter.priceMin != null">AND (CASE WHEN deal_type = 'WOLSE' THEN monthly_rent ELSE COALESCE(deal_amount, deposit) END) &gt;= #{filter.priceMin}</if>
+            <if test="filter.priceMax != null">AND (CASE WHEN deal_type = 'WOLSE' THEN monthly_rent ELSE COALESCE(deal_amount, deposit) END) &lt;= #{filter.priceMax}</if>
         </if>
     </sql>
 
@@ -114,8 +115,8 @@
                 AND res.property_type IN
                 <foreach item="pt" collection="filter.propertyTypes" open="(" separator="," close=")">#{pt}</foreach>
             </if>
-            <if test="filter.priceMin != null">AND COALESCE(res.deal_amount, res.deposit) &gt;= #{filter.priceMin}</if>
-            <if test="filter.priceMax != null">AND COALESCE(res.deal_amount, res.deposit) &lt;= #{filter.priceMax}</if>
+            <if test="filter.priceMin != null">AND (CASE WHEN res.deal_type = 'WOLSE' THEN res.monthly_rent ELSE COALESCE(res.deal_amount, res.deposit) END) &gt;= #{filter.priceMin}</if>
+            <if test="filter.priceMax != null">AND (CASE WHEN res.deal_type = 'WOLSE' THEN res.monthly_rent ELSE COALESCE(res.deal_amount, res.deposit) END) &lt;= #{filter.priceMax}</if>
         </if>
         GROUP BY LEFT(res.lawd_cd, 5), rs.region_name, rs.center_lat, rs.center_lon, rs.avg_amount, rs.max_amount
         ORDER BY region_cd
