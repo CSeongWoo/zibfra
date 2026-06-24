@@ -2,7 +2,7 @@
   <!--
     우측 매물 목록(기능4). 클러스터(동일좌표) 마커 클릭 시 부모가 v-if 로 띄운다.
     props.items 를 종합점수(페르소나 반영) 내림차순으로 카드 표시.
-    카드 클릭 → select(id) → 상세페이지(§7.4 단방향). 닫기 → close. 하트는 FAV API 영역(후속).
+    카드 클릭 → select(id) → 상세페이지(§7.4 단방향). 닫기 → close.
   -->
   <aside class="list-panel">
     <div class="panel-inner">
@@ -36,7 +36,6 @@
 
           <div class="price-row">
             <span class="price">{{ priceLabel(m) }}</span>
-            <button class="heart" title="즐겨찾기(준비중)" @click.stop>♡</button>
           </div>
 
           <div class="bars">
@@ -231,17 +230,6 @@ const scoreOf = (m) => totalScore(m, mapStore.persona);
   font-weight: 800;
   color: #041627;
 }
-
-.heart {
-  background: transparent;
-  border: none;
-  color: #c4c6cd;
-  font-size: 18px;
-  cursor: pointer;
-  transition: color 0.15s ease;
-}
-
-.heart:hover { color: #ba1a1a; }
 
 /* 인프라 미니바 */
 .bars {
