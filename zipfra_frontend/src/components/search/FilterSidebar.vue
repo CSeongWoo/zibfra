@@ -79,12 +79,12 @@
           </div>
         </div>
 
-        <!-- ===== 페르소나 ===== -->
+        <!-- ===== 인프라 가중치 ===== -->
         <div class="persona-card">
-          <h3 class="sec-title">🎚 페르소나 가중치</h3>
+          <h3 class="sec-title">🎚 인프라 가중치</h3>
           <p class="desc">
             <template v-if="lockedPreset">프리셋 적용 중 — 같은 버튼을 다시 누르면 직접 조절할 수 있습니다.</template>
-            <template v-else>슬라이더 조정 시 지도 마커와 목록 점수가 실시간 업데이트됩니다.</template>
+            <template v-else>원하는 인프라의 중요도를 조정해보세요. 내 취향에 맞춘 입지 점수로 매물들이 실시간 재평가됩니다.</template>
           </p>
 
           <div class="slider" :class="{ locked: lockedPreset }" v-for="g in GROUPS" :key="g.key">

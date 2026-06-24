@@ -8,16 +8,22 @@ import lombok.AllArgsConstructor;
 import java.time.LocalDateTime;
 
 /**
- * mysql_ai_summaries 테이블 매핑 도메인 객체 (AGENTS.md §6.3).
+ * ai_summaries 테이블 매핑 도메인 객체 (AGENTS.md §6.3).
  *
  * <pre>
- * summary_type   VARCHAR(20)  — PROPERTY | REVIEW
- * target_id      BIGINT       — propertyId (PROPERTY) 또는 targetId (REVIEW)
- * target_type    VARCHAR(20)  — PROPERTY 시 null, REVIEW 시 BUILDING|AREA
+ * summary_type     VARCHAR(50)  — PROPERTY_INFO | REVIEW
+ * target_type      VARCHAR(50)  — PROPERTY | BUILDING | AREA
+ * target_id        VARCHAR(255) — 논리참조 (매물ID 또는 법정동코드)
+ * summary          TEXT         — 요약 본문
+ * positives        JSON         — 긍정 테마 배열 직렬화 텍스트
+ * negatives        JSON         — 부정 테마 배열 직렬화 텍스트
+ * review_count     INT          — 분석된 리뷰 수
+ * model_name       VARCHAR(100) — 예: gpt-4o-mini
  * summary_available TINYINT(1)
- * summary_json   JSON         — 전체 응답 페이로드 직렬화. LLM 불가 시 null
- * created_at     DATETIME
- * expires_at     DATETIME     — created_at + 24h
+ * generated_at     DATETIME
+ * expires_at       DATETIME     — 캐시 만료 시간 (TTL 24h)
+ * created_at       DATETIME
+ * updated_at       DATETIME
  * </pre>
  */
 @Getter
@@ -28,37 +34,48 @@ public class AiSummary {
 
     private Long id;
 
-    /** 요약 유형: PROPERTY | REVIEW */
+    /** 요약 유형: PROPERTY_INFO | REVIEW */
     private String summaryType;
 
-    /** 조회 대상 ID (propertyId 또는 targetId). */
-    private Long targetId;
-
-    /** 조회 대상 유형 (PROPERTY 시 null, REVIEW 시 BUILDING|AREA). */
+    /** 조회 대상 유형: PROPERTY | BUILDING | AREA */
     private String targetType;
+
+    /** 조회 대상 ID: 매물ID 또는 법정동코드 등 */
+    private String targetId;
+
+    /** 요약 본문 (Fallback 시 null 가능) */
+    private String summary;
+
+    /** 긍정 테마 배열 JSON 문자열 (Nullable) */
+    private String positives;
+
+    /** 부정 테마 배열 JSON 문자열 (Nullable) */
+    private String negatives;
+
+    /** 분석된 리뷰 수 */
+    private Integer reviewCount;
+
+    /** LLM 모델명 (예: gpt-4o-mini) */
+    private String modelName;
 
     /** LLM 요약 가용 여부. Fallback 상태이면 false. */
     private boolean summaryAvailable;
 
-    /**
-     * 전체 응답 페이로드 JSON 직렬화 문자열.
-     * summaryAvailable=false 이면 null (AGENTS.md §6.3: 실패 결과 캐시 저장 금지).
-     */
-    private String summaryJson;
+    /** 요약 생성 시각 */
+    private LocalDateTime generatedAt;
 
-    /** 캐시 생성 시각. */
+    /** 캐시 만료 시각. expires_at > NOW() 이어야 유효한 캐시. */
+    private LocalDateTime expiresAt;
+
+    /** 데이터 생성 시각 */
     private LocalDateTime createdAt;
 
-    /**
-     * 캐시 만료 시각 (created_at + 24h).
-     * expires_at > NOW() 이어야 유효한 캐시로 간주.
-     */
-    private LocalDateTime expiresAt;
+    /** 데이터 수정 시각 */
+    private LocalDateTime updatedAt;
 
     /** 캐시가 현재 시각 기준으로 유효한지 확인. */
     public boolean isValid() {
         return summaryAvailable
-                && summaryJson != null
                 && expiresAt != null
                 && expiresAt.isAfter(LocalDateTime.now());
     }

@@ -5,7 +5,7 @@ import com.example.zipfra.dto.review.PageResponse;
 import com.example.zipfra.dto.review.ReviewRequest;
 import com.example.zipfra.dto.review.ReviewResponse;
 import com.example.zipfra.mapper.mysql.ReviewMapper;
-import com.example.zipfra.service.ai.AiSummaryService;
+import com.example.zipfra.service.ai.AiReviewService;
 import com.example.zipfra.util.CryptoUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,7 +27,7 @@ public class ReviewService {
 
     private final ReviewMapper reviewMapper;
     private final CryptoUtils cryptoUtils;
-    private final AiSummaryService aiSummaryService;
+    private final AiReviewService aiReviewService;
 
     @Transactional("primaryTransactionManager")
     public void createReview(Long userId, ReviewRequest request) {
@@ -72,16 +72,10 @@ public class ReviewService {
     }
 
     /**
-     * targetId 문자열로 AI 요약 캐시를 안전하게 무효화한다.
-     * NumberFormatException은 경고 로그 후 스킵 (비치명적).
+     * targetId 문자열로 AI 요약 캐시를 논리적으로 무효화한다.
      */
     private void invalidateAiCacheSafely(String targetId) {
-        try {
-            Long targetIdLong = Long.parseLong(targetId);
-            aiSummaryService.invalidateReviewCache(targetIdLong);
-            log.debug("[ReviewService] AI 요약 캐시 무효화 완료 targetId={}", targetId);
-        } catch (NumberFormatException e) {
-            log.warn("[ReviewService] targetId 파싱 실패 — 캐시 무효화 스킵 targetId={}", targetId);
-        }
+        aiReviewService.invalidateReviewCache(targetId);
+        log.debug("[ReviewService] AI 요약 캐시 무효화 완료 targetId={}", targetId);
     }
 }
