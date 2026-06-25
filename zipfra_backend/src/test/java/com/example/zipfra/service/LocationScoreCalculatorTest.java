@@ -27,18 +27,39 @@ class LocationScoreCalculatorTest {
     }
 
     @Test
-    @DisplayName("T-7: subway 320m → 카테고리 raw base 0.879, 그룹 기여는 ×40 가중 = 35.156")
+    @DisplayName("T-7: subway 320m → 밴드 평탄대 W=1.0, 그룹 기여 ×40 = 40.0")
     void transit_oneIsEnough_subway() {
         var result = calculator.calculate(
                 List.of(poi("SUBWAY", 320)),
                 Map.of("transit", 1.0));
 
         ScoreResponse.GroupResult transit = result.breakdown().get("transit");
-        // 카테고리 base 는 raw W 유지(교통 flat 300m → 320m W=(3.75/4)²≈0.879)
-        assertThat(transit.categories().get("subway").base()).isCloseTo(0.8789, within(0.0001));
-        // 그룹 기여 = base × 지하철 가중 40 → 35.156 (역세권 우대)
-        assertThat(transit.score()).isCloseTo(35.156, within(0.01));
-        assertThat(result.finalScore()).isCloseTo(35.156, within(0.01));
+        // 320m 은 300~800m 평탄대 → W=1.0 (밴드형, 2026-06-25)
+        assertThat(transit.categories().get("subway").base()).isCloseTo(1.0, within(0.0001));
+        // 그룹 기여 = base × 지하철 가중 40 → 40.0
+        assertThat(transit.score()).isCloseTo(40.0, within(0.01));
+        assertThat(result.finalScore()).isCloseTo(40.0, within(0.01));
+    }
+
+    @Test
+    @DisplayName("지하철 밴드형: 0m W=0.5(소음) / 150m 0.75 / 800m 1.0 / 1200m 0.444")
+    void subwayBandDecay() {
+        // 역 앞 0m → 소음 감점 W=0.5
+        assertThat(calculator.calculate(List.of(poi("SUBWAY", 0)), Map.of("transit", 1.0))
+                .breakdown().get("transit").categories().get("subway").base())
+                .isCloseTo(0.5, within(0.0001));
+        // 150m → 0.5 + 0.5×(150/300) = 0.75
+        assertThat(calculator.calculate(List.of(poi("SUBWAY", 150)), Map.of("transit", 1.0))
+                .breakdown().get("transit").categories().get("subway").base())
+                .isCloseTo(0.75, within(0.0001));
+        // 800m → 평탄대 끝 W=1.0
+        assertThat(calculator.calculate(List.of(poi("SUBWAY", 800)), Map.of("transit", 1.0))
+                .breakdown().get("transit").categories().get("subway").base())
+                .isCloseTo(1.0, within(0.0001));
+        // 1200m → t=15, 1/(15/10)² = 0.4444
+        assertThat(calculator.calculate(List.of(poi("SUBWAY", 1200)), Map.of("transit", 1.0))
+                .breakdown().get("transit").categories().get("subway").base())
+                .isCloseTo(0.4444, within(0.0001));
     }
 
     @Test
@@ -88,7 +109,7 @@ class LocationScoreCalculatorTest {
         var result = calculator.calculate(
                 List.of(poi("SUBWAY", 300), poi("MART", 400)),
                 Map.of("transit", 1.0, "commerce", 1.0));
-        // 교통 flat 3.75분(300m): 300m=경계 → W=1.0
+        // 지하철 밴드: 300m=평탄대 시작 경계 → W=1.0
         assertThat(result.breakdown().get("transit").categories().get("subway").base())
                 .isEqualTo(1.0);
         // 일반(상업) flat 5분(400m): 400m=경계 → W=1.0 (교통 외엔 종전 유지)
@@ -107,7 +128,7 @@ class LocationScoreCalculatorTest {
                 result.breakdown().get("transit").categories().get("subway");
         assertThat(subway.count()).isEqualTo(2);
         assertThat(subway.nearestMeters()).isEqualTo(320);
-        assertThat(subway.base()).isCloseTo(0.8789, within(0.0001));   // 320m 만 반영(교통 flat 300m → W<1), 1200m 무시
+        assertThat(subway.base()).isCloseTo(1.0, within(0.0001));   // 320m=평탄대 W=1.0 만 반영, 1200m 무시
     }
 
     @Test
@@ -134,13 +155,13 @@ class LocationScoreCalculatorTest {
 
         assertThat(result.breakdown().keySet())
                 .containsExactlyInAnyOrder("transit", "education", "commerce", "convenience");
-        // transit: subway 320m raw W=0.879 × 지하철가중 40 = 35.156
-        assertThat(result.breakdown().get("transit").score()).isCloseTo(35.156, within(0.01));
+        // transit: subway 320m 평탄대 W=1.0 × 지하철가중 40 = 40.0
+        assertThat(result.breakdown().get("transit").score()).isCloseTo(40.0, within(0.01));
         // commerce: restaurant Σ=1.4444(일반 flat 400m·가중 1 유지), w=0.9 → 1.300
         assertThat(result.breakdown().get("commerce").categories().get("restaurant").base())
                 .isCloseTo(1.4444, within(0.0001));
         assertThat(result.breakdown().get("commerce").score()).isEqualTo(1.300);
-        assertThat(result.finalScore()).isCloseTo(36.456, within(0.01));   // 35.156 + 1.300
+        assertThat(result.finalScore()).isCloseTo(41.300, within(0.01));   // 40.0 + 1.300
     }
 
     @Test
