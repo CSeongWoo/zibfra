@@ -31,6 +31,9 @@ public interface IngestionMapper {
                   @Param("lng") double lng,
                   @Param("lat") double lat);
 
+    /** 특정 카테고리 POI 만 삭제(버스정류장 등 부분 재적재 멱등 — clearPoi 와 달리 다른 카테고리는 보존). */
+    int deletePoiByCategory(@Param("category") String category);
+
     /** region_summary 전체 삭제(실집계 재생성). */
     int clearRegionSummary();
 

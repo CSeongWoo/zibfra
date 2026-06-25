@@ -18,8 +18,9 @@ import java.util.Optional;
  */
 public enum Category {
 
-    SUBWAY("subway", Group.TRANSIT, Model.ONE_IS_ENOUGH),
-    BUS_STOP("bus_stop", Group.TRANSIT, Model.MORE_IS_BETTER),
+    // 지하철은 그룹 기여에 ×40 가중(역세권 우대). 버스는 상한 15(중복·개수 인플레 방지). 2026-06-25.
+    SUBWAY("subway", Group.TRANSIT, Model.ONE_IS_ENOUGH, 40.0, Double.MAX_VALUE),
+    BUS_STOP("bus_stop", Group.TRANSIT, Model.MORE_IS_BETTER, 1.0, 15.0),
     SCHOOL("school", Group.EDUCATION, Model.ONE_IS_ENOUGH),
     ACADEMY("academy", Group.EDUCATION, Model.MORE_IS_BETTER),
     RESTAURANT("restaurant", Group.COMMERCE, Model.MORE_IS_BETTER),
@@ -55,11 +56,19 @@ public enum Category {
     private final String key;   // 응답 JSON 카테고리 키 (소문자)
     private final Group group;
     private final Model model;
+    private final double weight; // 그룹 기여 시 base 에 곱하는 가중치(기본 1.0)
+    private final double cap;    // 그룹 기여 시 base 상한(기본 무제한)
 
     Category(String key, Group group, Model model) {
+        this(key, group, model, 1.0, Double.MAX_VALUE);
+    }
+
+    Category(String key, Group group, Model model, double weight, double cap) {
         this.key = key;
         this.group = group;
         this.model = model;
+        this.weight = weight;
+        this.cap = cap;
     }
 
     public String key() {
@@ -72,6 +81,16 @@ public enum Category {
 
     public Model model() {
         return model;
+    }
+
+    /** 그룹 기여 가중치(지하철 ×40 등, 기본 1.0). */
+    public double weight() {
+        return weight;
+    }
+
+    /** 그룹 기여 상한(버스 15 등, 기본 무제한). */
+    public double cap() {
+        return cap;
     }
 
     /** PostGIS poi.category(대문자) → enum 매핑. 미일치 시 empty. */

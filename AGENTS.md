@@ -63,7 +63,7 @@ spec 파일이 없으므로 게이트는 **PR 리뷰**로 강제한다.
 | T-6 | `POST /ai/property-summary` 헤더 없음 | `401 TOKEN_MISSING` |
 | T-6 | `POST /ai/review-summary` 헤더 없음 | `401 TOKEN_MISSING` |
 | T-6 | `GET /map/markers` 헤더 없음 (Public) | `200 OK` |
-| **T-7** | subway 1개, 320m → t=4.0, W=1.0 (one_is_enough) | base=**1.000** |
+| **T-7** | subway 1개, 320m → t=4.0, 교통 flat 3.75 → W=(3.75/4)²≈0.879 (one_is_enough) | base=**0.879** |
 | T-7 | mart 1개, 850m → t=10.625, W=1/(10.625/5)²≈0.2215 (more_is_better) | base=**0.2215**, commerce w=0.6 → 기여 0.133 |
 | T-7 | academy 2개 [200m,600m] → t=[2.5,7.5], W=[1.0,0.4444], Σ=1.4444 (more_is_better, education w=1.0) | score=**1.444** |
 | T-7 | env_penalty/서울 한정 케이스 | **폐기**(§5 재편, 4분류 전부 양수) |
@@ -215,7 +215,8 @@ spec 파일이 없으므로 게이트는 **PR 리뷰**로 강제한다.
 
 > **(2026-06-13, §11) 와이어프레임 4분류로 카테고리 전면 재편.** 기존 ESSENTIAL/LEISURE/ENV_PENALTY 폐기 → 교통/교육/상업/편의 4그룹. 거리 감쇠 엔진(W)·모델(one_is_enough/more_is_better)은 유지. 가중치는 **그룹 단위**(와이어프레임 페르소나 슬라이더 4개)로 변경. ENV 감점·서울 한정 로직(`isInSeoul`·`seoul_boundary`) 완전 제거. PR #12 반영.
 
-- 거리 감쇠: `t ≤ 5 → W=1`, `t > 5 → W = 1/(t/5)²`.
+- 거리 감쇠: `t ≤ flat → W=1`, `t > flat → W = 1/(t/flat)²`. **flat = 5분(400m) 기본, 버스(bus_stop)만 3.75분(300m)** (2026-06-25, §11). 아래 W표는 일반(flat=5) 기준.
+- **지하철(subway) 밴드형 감쇠**(2026-06-25, §11 — "역 코앞은 소음"): `0~300m → W=0.5→1.0 선형`(역 앞 소음 감점), `300~800m → W=1.0`(역세권 최적 평탄대), `800m+ → W=1/(t/10)²`(flat=10분=800m). 지하철만 적용, 버스·타 그룹은 단순 flat 후 감쇠. (`LocationScoreCalculator.subwayDecay`)
 
 | t | 5 | 10 | 15 | 20 |
 |---|---|----|----|----|
@@ -245,7 +246,8 @@ for category in all_categories:
     else:  # more_is_better
         base[category] = sum(W(p.travel_time) for p in pois)
 for group in [transit, education, commerce, convenience]:
-    group_base = sum(base[c] for c in categories_of(group))
+    # 카테고리 그룹 기여 = min(cap, base) × weight. 지하철 weight=40(역세권 우대), 버스 cap=15(인플레 방지), 나머지 weight=1·cap=∞
+    group_base = sum(min(cap[c], base[c]) * weight[c] for c in categories_of(group))
     contribution[group] = group_base * user_weight[group]
 final = sum(contribution.values())
 ```
@@ -722,6 +724,9 @@ function upsertCache(summaryType, targetId, targetType, payload):
 규칙·수식·스택이 현실과 어긋나면 편법 코드 금지. 멈추고 **이 문서를 먼저 고친다.** 변경 시 사유를 PR에 남긴다.
 
 **변경 이력**
+- (2026-06-25) **지하철 밴드형 감쇠 도입(§5)** — "역 바로 앞은 선로 소음으로 오히려 마이너스"라는 현실 반영. 종전 교통 그룹 일괄 flat(0~300m W=1) → **지하철만** 밴드형: `0~300m W=0.5→1.0 선형`(소음 감점), `300~800m W=1.0`(역세권 최적), `800m+ 1/(t/10)²`(flat 800m). 버스는 종전 flat 300m 유지(밴드 비적용 → 상수명 의미를 '교통 전체'→'버스'로 좁힘). `LocationScoreCalculator.subwayDecay` 신설, `base()`가 `cat==SUBWAY` 분기. T-7 subway 320m 은 평탄대라 base 0.879→**1.0**·그룹기여 ×40=**40.0**(테스트 갱신, 밴드 경계 0m/150m/800m/1200m 케이스 추가). **`property_score.transit_base` 재계산 필요**(`POST /admin/recompute-scores`). refactor/#31.
+- (2026-06-25) **교통 점수 재균형: 지하철 ×40 가중 + 버스 상한 15 + 버스 중복제거(§5)** — "지하철 코앞(강남 서광)인데 버스 많은 부산 반여동보다 교통점수가 낮다"는 결정적 불일치. 원인: 지하철=`one_is_enough`라 최대 1.0점만 기여 vs 버스=`more_is_better` 합산이 40~50점 → **지하철이 사실상 무시**됨(역세권인데 버스 개수에 묻힘). 해결: ① **지하철 그룹 기여 ×40 가중**(`Category.weight`, 역세권 우대), ② **버스 그룹 기여 상한 15**(`Category.cap`, 중복·개수 인플레 방지), ③ **버스 POI 물리적 중복제거**(同名+44m격자, 227,053→175,421, 23%↓ — 방향·노선별 중복 등록 제거). 결과 강남 서광 68→(지하철 지배)·부산 반여 74→하락으로 상식 복원. `LocationScoreCalculator` 그룹 합산이 `min(cap,base)×weight`. property_score 재계산. T-7 subway 320m 카테고리 raw base 0.879 유지·그룹 기여 ×40=35.16. (노선 수 기반은 TAGO 서울 미커버로 여전히 보류.)
+- (2026-06-25) **교통 그룹 감쇠 플랫 구간 단축 400m→300m(§5)** — 버스정류장 전국 적재 후 "멀어도 정류장 많으면 교통 점수가 후하다"는 직관 불일치 제기. 분석 결과 제곱 감쇠가 먼 정류장은 이미 강하게 깎고 있었으나(먼-다수 시나리오 최대 15점), 도시권 변별력 강화를 위해 **교통(transit) 그룹만** 감쇠 플랫을 `5분(400m) → 3.75분(300m)`로 단축(300m 이내만 W=1, 그 너머 더 가파르게). 교육·상업·편의는 400m 유지. `LocationScoreCalculator`에 `TRANSIT_FLAT_MINUTES=3.75` 추가, `base()`가 그룹별 flat 선택. 결과 transit base median 42→28(약 33%↓). 표시 스케일은 `GROUP_SCALE.transit=1.5` 유지(B안 — 교통을 "역세권만 고득점"인 빡센 그룹으로). `property_score.transit_base` 재계산. T-7 subway 320m base 1.000→0.879. (대안: 노선 수 기반 모델은 국가대중교통DB가 서울 미커버라 보류.)
 - (2026-06-23) **가격 필터 거래유형별 기준 정정(§8.1.1)** — ① **매매에 보증금 개념 제거**: 가격 라벨을 선택 거래유형별로(`매매가`/`보증금`/`월세`, `priceFilterLabel`). ② **월세는 `monthly_rent` 기준 필터**(종전 `deposit`): 매퍼 가격조건을 `CASE WHEN deal_type='WOLSE' THEN monthly_rent ELSE COALESCE(deal_amount,deposit) END` 으로(DETAIL·SUMMARY 공통). ③ **가격 입력칸 단위 천만→만원**(저장값 그대로, 1억=10000만). 슬라이더 스텝은 만원 배열 유지. PR #19 후속.
 - (2026-06-23) **지도 필터·마커 UX 개편(§7.1·§7.4·§8.1.1)** — 5건. (1) **가격 필터 입력칸+슬라이더 병행**: FilterSidebar 가격 섹션에 천만 단위 직접입력칸 2개(`[최소]~[최대]`) + 비균등 슬라이더 동시 제공(둘 다 `filter.priceMin/Max` 만원 공유). (2) **슬라이더 비균등 스텝**: `utils/price.js` `PRICE_STOPS`(만원 배열, 전부 천만 배수라 0.5억 같은 소수 억 미발생) — 슬라이더는 인덱스를 다뤄 눈금 균등·값 점프. (3) **인프라 표시 제거**: FilterSidebar 토글 + 지도 POI 점(`renderPois`) + store `infraLayers`/`pois` + MapContainer `loadPois` 제거. MAP-02(`/map/pois`)·`api/pois.js` 백엔드는 유지(상세페이지 인프라 개수가 사용). (4) **동일좌표 마커 클러스터 + 목록 토글**: KakaoMap이 좌표 5자리로 그룹핑(단지당 지오코딩 1회라 동일좌표=단지) → 마커 1개(평균 점수·평균 대표가 `~`·`N건` 뱃지). 마커 클릭 → store `openList(items)` → 우측 `PropertyListPanel`(평소 숨김) 표시 → 카드 클릭 → 상세페이지. 목록 열림 시 ZoomButtons·topbar 좌측 이동, SUMMARY 전환 시 자동 닫힘. (5) **SUMMARY 매물 갯수+필터**: §8.1.1 반전 — 풍선 숫자 = `real_estate_sales` 실시간 `COUNT`(거래 행 수) + bbox·필터 반영. `MarkerMapper.findRegionSummaries(bbox,filter)`, `region_summary`는 이름·중심좌표·평균/최고가만 JOIN. `RegionSummaryDTO.dealCount`→`propertyCount`(단지검색 `PropertySearchDTO.dealCount`·`region_summary.deal_count` 컬럼·적재배치는 불변). 성능: 줌아웃 전국 bbox면 GiST 프리필터 후 GROUP BY 250그룹 COUNT(데모 OK). 신규 의존성 0, 전 영역 Dev A.
 - (2026-06-22) **MAP-03 단지 검색 신설(§8.1)** — 검색창이 카카오 `keywordSearch`라 편의점·다이소 등 일반 POI가 떠 의도(지역/매물)와 불일치. 검색을 2원화: **지역=카카오 `addressSearch`**(주소 전용, POI 배제, 프론트), **단지=신규 `GET /api/v1/map/search`**(우리 `real_estate_sales.building_name ILIKE`, 단지 단위 `GROUP BY building_name,lawd_cd` 집계 — 대표 좌표 `ST_Centroid`·`dealCount`·면적범위·준공년, dealCount desc). `q` 2자 미만=빈 결과, `limit` def 20/max 50. SearchBar 드롭다운을 지역/단지 2섹션으로. Public(SecurityConfig permitAll). 성능: 170k ILIKE seq-scan(데모 OK, 대량화 시 `pg_trgm` GIN). PR #12(property-search).
