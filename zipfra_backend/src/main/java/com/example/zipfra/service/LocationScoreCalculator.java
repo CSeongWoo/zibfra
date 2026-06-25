@@ -36,8 +36,8 @@ public class LocationScoreCalculator {
     private static final double DECAY_FLAT_MINUTES = 5.0;        // 일반: t ≤ 5분(400m) → W=1
     // 버스정류장은 감쇠 시작을 300m(3.75분)로 앞당김 — 정류장 변별력(2026-06-25).
     private static final double TRANSIT_FLAT_MINUTES = 3.75;     // 300m / 80m·분⁻¹ (버스)
-    // 지하철 밴드형(2026-06-25): 0~300m 소음 감점(W 0.5→1.0 선형), 300~800m 만점, 800m+ 거리 감쇠.
-    private static final double SUBWAY_NOISE_METERS = 300.0;     // 소음 감점 구간 상한
+    // 지하철 밴드형(2026-06-25): 0~300m 소음 감점(W 0.5→1.0 선형), 100~800m 만점, 800m+ 거리 감쇠.
+    private static final double SUBWAY_NOISE_METERS = 100.0;     // 소음 감점 구간 상한
     private static final double SUBWAY_PEAK_END_METERS = 800.0;  // 평탄대(만점) 끝 → 이후 감쇠
     private static final double SUBWAY_NEAR_FLOOR = 0.5;         // 역 바로 앞(0m)의 W
 
